@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APS Revit Cloud Model Publisher</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Artifact+Elements:wght@400;700&display=swap');
+        
+        * {
+            font-family: 'Artifact Elements', Arial, sans-serif;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .auth-section, .setup-section, .publish-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+
+        .section-title {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .status.connected {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="file"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: #6c757d;
+        }
+
+        button.secondary:hover {
+            background: #5a6268;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Hub/Project Selection Panels */
+        .selection-container {
+            display: flex;
+            height: 400px;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .hub-panel, .project-panel {
+            flex: 1;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+            background: white;
+        }
+
+        .panel-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .hub-item, .project-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 14px;
+        }
+
+        .hub-item:hover, .project-item:hover {
+            background-color: #e9ecef;
+        }
+
+        .hub-item.selected, .project-item.selected {
+            background-color: #667eea;
+            color: white;
+        }
+
+        .no-items {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-entry.error {
+            color: #f44336;
+        }
+
+        .log-entry.success {
+            color: #4caf50;
+        }
+
+        .log-entry.info {
+            color: #2196f3;
+        }
+
+        .log-entry.warning {
+            color: #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>APS Revit Cloud Model Publisher</h1>
+            <p>Remotely trigger Revit Cloud Model publishing via Autodesk Platform Services</p>
+        </div>
+
+        <div class="content">
+            <!-- Authentication Section -->
+            <div class="auth-section">
+                <h2 class="section-title">1. Authentication</h2>
+                <div id="authMessage"></div>
+                <div class="form-group">
+                    <button onclick="login()" id="loginBtn">Login with Autodesk</button>
+                    <button onclick="logout()" class="secondary" id="logoutBtn" style="display: none;">Logout</button>
+                </div>
+            </div>
+
+            <!-- Design Automation Setup Section -->
+            <div class="setup-section">
+                <h2 class="section-title">2. Design Automation Setup</h2>
+                <div id="setupMessage"></div>
+                
+                <div class="form-group">
+                    <label>AppBundle (RevitCloudPublisher.zip):</label>
+                    <input type="file" id="appBundleFile" accept=".zip">
+                    <button onclick="uploadAppBundle()">📤 Upload AppBundle</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="engineVersion">Revit Engine Version:</label>
+                    <select id="engineVersion">
+                        <option value="2024">Revit 2024</option>
+                        <option value="2025">Revit 2025</option>
+                        <option value="2026" selected>Revit 2026</option>
+                    </select>
+                    <button onclick="createActivity()">⚙️ Create Activity</button>
+                </div>
+
+                <div id="setupLog" class="log hidden"></div>
+            </div>
+
+            <!-- Project Selection Section -->
+            <div class="publish-section">
+                <h2 class="section-title">3. Select Project & Revit File</h2>
+                <div id="publishMessage"></div>
+                
+                <div class="form-group">
+                    <button onclick="loadHubs()">🔄 Load Hubs & Projects</button>
+                </div>
+
+                <!-- Hub and Project Selection Panels -->
+                <div class="selection-container">
+                    <!-- Hubs Panel -->
+                    <div class="hub-panel">
+                        <div class="panel-header">Hubs</div>
+                        <input type="text" class="filter-input" id="hubFilter" placeholder="Filter hubs..." oninput="filterHubs()">
+                        <div id="hubsList">
+                            <div class="no-items">Click "Load Hubs & Projects" to begin</div>
+                        </div>
+                    </div>
+
+                    <!-- Projects Panel -->
+                    <div class="project-panel">
+                        <div class="panel-header">Projects</div>
+                        <input type="text" class="filter-input" id="projectFilter" placeholder="Filter projects..." oninput="filterProjects()">
+                        <div id="projectsList">
+                            <div class="no-items">Select a hub to view projects</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="rvtFileSelect">Revit Cloud Models:</label>
+                    <select id="rvtFileSelect">
+                        <option value="">Select a project to load Revit files...</option>
+                    </select>
+                </div>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="region">Region:</label>
+                        <select id="region">
+                            <option value="US">US</option>
+                            <option value="EMEA">EMEA</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="revitVersion">Revit Version:</label>
+                        <select id="revitVersion">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026" selected>2026</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="projectGuid">Project GUID:</label>
+                        <input type="text" id="projectGuid" placeholder="Auto-filled from selection" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="modelGuid">Model GUID:</label>
+                        <input type="text" id="modelGuid" placeholder="Auto-filled from file selection" readonly>
+                    </div>
+                </div>
+
+                <button onclick="publishModel()">🚀 Publish Cloud Model</button>
+
+                <div id="workItemLog" class="log hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

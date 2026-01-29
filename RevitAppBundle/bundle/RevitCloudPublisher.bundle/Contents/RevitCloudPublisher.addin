@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="DBApplication">
+    <Name>RevitCloudPublisher</Name>
+    <Assembly>.\RevitCloudPublisher.dll</Assembly>
+    <AddInId>a1b2c3d4-e5f6-4789-a012-3456789abcde</AddInId>
+    <FullClassName>RevitCloudPublisher.RevitCloudPublisherApp</FullClassName>
+    <Description>Publishes Revit Cloud Models via Design Automation</Description>
+    <VendorId>Autodesk</VendorId>
+    <VendorDescription>
+    </VendorDescription>
+  </AddIn>
+</RevitAddIns>

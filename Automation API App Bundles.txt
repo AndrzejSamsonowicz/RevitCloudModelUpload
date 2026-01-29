@@ -1,0 +1,12 @@
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-POST/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-aliasId-DELETE/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-aliasId-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-POST/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-DELETE/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-POST/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-version-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-version-DELETE/

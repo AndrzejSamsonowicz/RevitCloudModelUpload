@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage 
+    SchemaVersion="1.0" 
+    AutodeskProduct="Revit" 
+    ProductType="Application" 
+    Name="RevitCloudPublisher" 
+    Description="Revit Cloud Model Publisher for Design Automation" 
+    Author="Your Company"
+    AppVersion="1.0.0" 
+    ProductCode="{12345678-1234-1234-1234-123456789012}">
+  
+  <CompanyDetails 
+      Name="Your Company" 
+      Email="support@yourcompany.com" 
+      Url="https://yourcompany.com" />
+  
+  <Components Description="Revit Cloud Publisher Components">
+    <RuntimeRequirements 
+        OS="Win64" 
+        Platform="Revit" 
+        SeriesMin="R2024" 
+        SeriesMax="R2026" />
+    
+    <ComponentEntry 
+        AppName="RevitCloudPublisher" 
+        Version="1.0.0"
+        ModuleName="./Contents/RevitCloudPublisher.addin"
+        AppDescription="Publishes Revit Cloud Models"
+        LoadOnCommandInvocation="False"
+        LoadOnRevitStartup="True">
+    </ComponentEntry>
+  </Components>
+</ApplicationPackage>

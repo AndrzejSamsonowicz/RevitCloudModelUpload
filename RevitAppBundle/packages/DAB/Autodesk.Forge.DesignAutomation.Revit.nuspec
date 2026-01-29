@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>Autodesk.Forge.DesignAutomation.Revit</id>
+    <version>2026.0.0</version>
+    <authors>Autodesk Forge</authors>
+    <owners>Autodesk Forge</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="file">LICENSE.txt</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <iconUrl>http://developer.static.autodesk.com/images/logo_forge-2-line.png</iconUrl>
+    <description>Design Automation Bridge for Revit</description>
+    <copyright>Autodesk Inc.</copyright>
+    <tags>autodesk autodesk-forge revit design-automation</tags>
+  </metadata>
+</package>

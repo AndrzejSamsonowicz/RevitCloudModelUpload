@@ -1,0 +1,13 @@
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-POST/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-aliasId-DELETE/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-aliasId-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-aliasId-PATCH/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-POST/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-DELETE/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-POST/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-version-GET/
+https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-version-DELETE/
