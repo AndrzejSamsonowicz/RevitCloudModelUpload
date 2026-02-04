@@ -39,3 +39,4 @@ app.listen(PORT, () => {
     console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`✓ APS Client ID: ${process.env.APS_CLIENT_ID ? '***' + process.env.APS_CLIENT_ID.slice(-4) : 'NOT SET'}`);
 });
+

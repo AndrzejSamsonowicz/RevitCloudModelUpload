@@ -6,7 +6,10 @@ window.addEventListener('DOMContentLoaded', () => {
     sessionId = params.get('session');
 
     if (sessionId) {
-        checkSession();
+        checkSession().then(() => {
+            // Auto-upload AppBundle after successful authentication
+            autoUploadAppBundle();
+        });
         // Clean URL
         window.history.replaceState({}, document.title, '/');
     }
@@ -59,18 +62,13 @@ async function checkSession() {
 function updateAuthUI(authenticated) {
     const loginBtn = document.getElementById('loginBtn');
     const logoutBtn = document.getElementById('logoutBtn');
-    const authStatus = document.getElementById('authStatus');
 
     if (authenticated) {
         loginBtn.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
-        authStatus.textContent = 'Connected';
-        authStatus.className = 'status connected';
     } else {
         loginBtn.classList.remove('hidden');
         logoutBtn.classList.add('hidden');
-        authStatus.textContent = 'Not Connected';
-        authStatus.className = 'status disconnected';
     }
 }
 
@@ -99,6 +97,35 @@ async function setNickname() {
         }
     } catch (error) {
         showMessage('setupMessage', `Request failed: ${error.message}`, 'error');
+    }
+}
+
+async function autoUploadAppBundle() {
+    const engineVersion = document.getElementById('engineVersion').value;
+
+    try {
+        showMessage('setupMessage', 'Auto-uploading AppBundle...', 'info');
+        document.getElementById('setupLog').classList.remove('hidden');
+        addLog('Auto-uploading RevitCloudPublisher.zip from server...', '', 'setupLog');
+
+        const response = await fetch('/api/design-automation/appbundle/auto-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engineVersion })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showMessage('setupMessage', '✓ AppBundle uploaded automatically', 'success');
+            addLog(`✓ ${data.message}`, 'success', 'setupLog');
+        } else {
+            showMessage('setupMessage', `AppBundle not found: ${data.error}`, 'error');
+            addLog(`✗ ${data.error}`, 'error', 'setupLog');
+        }
+    } catch (error) {
+        showMessage('setupMessage', `Auto-upload failed: ${error.message}`, 'error');
+        addLog(`✗ Auto-upload failed: ${error.message}`, 'error', 'setupLog');
     }
 }
 
@@ -169,6 +196,9 @@ async function createActivity() {
     }
 }
 
+// Store command IDs for status checking
+let publishCommandIds = [];
+
 // Publish function
 async function publishModel() {
     if (!sessionId) {
@@ -176,48 +206,145 @@ async function publishModel() {
         return;
     }
 
-    const region = document.getElementById('region').value;
-    const projectGuid = document.getElementById('projectGuid').value.trim();
-    const modelGuid = document.getElementById('modelGuid').value.trim();
-    const revitVersion = document.getElementById('revitVersion').value;
+    // Get all selected files
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]:checked');
+    const selectedFiles = Array.from(checkboxes).map(cb => {
+        const item = cb.closest('.file-checkbox-item');
+        return {
+            projectGuid: item.dataset.projectGuid,
+            modelGuid: item.dataset.modelGuid,
+            fileName: item.dataset.fileName,
+            itemId: item.dataset.itemId
+        };
+    });
 
-    if (!projectGuid || !modelGuid) {
-        showMessage('publishMessage', 'Please enter Project GUID and Model GUID', 'error');
+    if (selectedFiles.length === 0) {
+        showMessage('publishMessage', 'Please select at least one Revit file', 'error');
         return;
     }
 
     try {
-        showMessage('publishMessage', 'Creating WorkItem...', 'info');
-        addLog('Initiating cloud model publish...');
+        showMessage('publishMessage', `Publishing ${selectedFiles.length} model(s) directly to cloud...`, 'info');
+        addLog(`Starting batch publish for ${selectedFiles.length} model(s)...`, 'info');
 
-        const response = await fetch('/api/design-automation/workitem/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId,
-                region,
-                projectGuid,
-                modelGuid,
-                revitVersion
-            })
-        });
+        let successCount = 0;
+        let failCount = 0;
+        publishCommandIds = []; // Reset command IDs
 
-        const data = await response.json();
+        // Process files sequentially using PublishModel API
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
+            addLog(`\n[${i + 1}/${selectedFiles.length}] Publishing: ${file.fileName}`, 'info');
 
-        if (response.ok) {
-            showMessage('publishMessage', data.message, 'success');
-            addLog(`WorkItem created: ${data.data.workItemId}`, 'success');
-            addLog(`Status: ${data.data.status}`);
-            
-            // Poll for status
-            pollWorkItemStatus(data.data.workItemId);
-        } else {
-            showMessage('publishMessage', `Error: ${data.error}`, 'error');
-            addLog(`Error: ${data.error}`, 'error');
+            const response = await fetch(`/api/data-management/publish/${encodeURIComponent(file.itemId)}`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionId}`
+                },
+                body: JSON.stringify({
+                    projectId: selectedProjectId
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                addLog(`  ✓ Publish command initiated successfully`, 'success');
+                addLog(`  Command ID: ${data.commandId}`);
+                addLog(`  Status: ${data.status}`);
+                publishCommandIds.push({
+                    commandId: data.commandId,
+                    fileName: file.fileName
+                });
+                successCount++;
+            } else {
+                addLog(`  ✗ Error: ${data.error}`, 'error');
+                failCount++;
+            }
+
+            // Small delay between requests
+            if (i < selectedFiles.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
         }
+
+        const summaryMsg = `Batch publish complete: ${successCount} succeeded, ${failCount} failed`;
+        showMessage('publishMessage', summaryMsg, failCount === 0 ? 'success' : 'info');
+        addLog(`\n✓ ${summaryMsg}`, failCount === 0 ? 'success' : 'info');
+        if (publishCommandIds.length > 0) {
+            addLog('\nℹ Click "Check Command Status" below to verify publish completion.', 'info');
+        }
+        addLog('Note: Files are being published to the cloud. Refresh BIM 360/ACC to see new versions.', 'info');
+        
     } catch (error) {
         showMessage('publishMessage', `Request failed: ${error.message}`, 'error');
         addLog(`Request failed: ${error.message}`, 'error');
+    }
+}
+
+async function checkCommandStatus() {
+    if (!publishCommandIds || publishCommandIds.length === 0) {
+        showMessage('publishMessage', 'No recent publish commands to check. Publish files first.', 'error');
+        return;
+    }
+
+    if (!selectedProjectId) {
+        showMessage('publishMessage', 'No project selected', 'error');
+        return;
+    }
+
+    try {
+        showMessage('publishMessage', `Checking status of ${publishCommandIds.length} command(s)...`, 'info');
+        addLog(`\n=== Checking Command Status ===`, 'info');
+
+        for (let i = 0; i < publishCommandIds.length; i++) {
+            const cmd = publishCommandIds[i];
+            addLog(`\n[${i + 1}/${publishCommandIds.length}] ${cmd.fileName}`, 'info');
+            addLog(`  Command ID: ${cmd.commandId}`);
+
+            const response = await fetch(
+                `/api/data-management/commands/${cmd.commandId}?projectId=${encodeURIComponent(selectedProjectId)}`,
+                { headers: { 'Authorization': `Bearer ${sessionId}` } }
+            );
+
+            const data = await response.json();
+            console.log('Command status response:', response.status, data);
+
+            if (response.ok) {
+                const status = data.command.attributes.status;
+                const extension = data.command.attributes.extension;
+                
+                if (status === 'complete') {
+                    addLog(`  ✓ Status: ${status}`, 'success');
+                } else if (status === 'failed') {
+                    addLog(`  ✗ Status: ${status}`, 'error');
+                    if (extension?.error) {
+                        addLog(`  Error: ${extension.error}`, 'error');
+                    }
+                } else {
+                    addLog(`  ⏳ Status: ${status}`, 'info');
+                }
+
+                if (extension?.message) {
+                    addLog(`  Message: ${extension.message}`);
+                }
+            } else {
+                const errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error || data);
+                addLog(`  ✗ Failed to check status: ${errorMsg}`, 'error');
+            }
+
+            // Small delay between requests
+            if (i < publishCommandIds.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+
+        addLog(`\n=== Status Check Complete ===`, 'info');
+        showMessage('publishMessage', 'Command status check complete. See log for details.', 'success');
+    } catch (error) {
+        showMessage('publishMessage', `Status check failed: ${error.message}`, 'error');
+        addLog(`Status check failed: ${error.message}`, 'error');
     }
 }
 
@@ -498,11 +625,13 @@ async function selectProject(projectId, projectName) {
     
     // Update UI
     document.querySelectorAll('.project-item').forEach(item => item.classList.remove('selected'));
-    event.target.classList.add('selected');
-    
-    // Extract project GUID from project ID (remove 'b.' prefix if present)
-    const projectGuid = projectId.startsWith('b.') ? projectId.substring(2) : projectId;
-    document.getElementById('projectGuid').value = projectGuid;
+    // Find and highlight the selected project
+    const selectedItem = Array.from(document.querySelectorAll('.project-item')).find(
+        item => item.textContent.trim() === projectName
+    );
+    if (selectedItem) {
+        selectedItem.classList.add('selected');
+    }
     
     // Load Revit files
     showMessage('publishMessage', `Loading Revit files from ${projectName}...`, 'info');
@@ -533,6 +662,8 @@ async function selectProject(projectId, projectName) {
     }
 }
 
+let allRevitFiles = [];
+
 async function loadRevitFiles(projectId, folderId) {
     try {
         const response = await fetch(
@@ -542,31 +673,23 @@ async function loadRevitFiles(projectId, folderId) {
         
         const data = await response.json();
         if (response.ok) {
-            const fileSelect = document.getElementById('rvtFileSelect');
-            fileSelect.innerHTML = '<option value="">Select a Revit Cloud Model...</option>';
+            const filesList = document.getElementById('rvtFilesList');
             
-            data.files.forEach(file => {
-                const option = document.createElement('option');
-                option.value = file.id;
-                option.textContent = `${file.name} (v${file.versionNumber})`;
-                option.dataset.fileId = file.id;
-                option.dataset.projectGuid = file.projectGuid;
-                option.dataset.modelGuid = file.modelGuid;
-                option.dataset.itemId = file.id; // Store itemId for PublishModel
-                fileSelect.appendChild(option);
-            });
+            if (!data.files || data.files.length === 0) {
+                filesList.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No Revit cloud models found</div>';
+                allRevitFiles = [];
+                return;
+            }
             
-            // Add change event to populate model GUID
-            fileSelect.onchange = function() {
-                const selectedOption = this.options[this.selectedIndex];
-                if (selectedOption.value) {
-                    // Use the actual GUIDs from the Data Management API response
-                    document.getElementById('projectGuid').value = selectedOption.dataset.projectGuid || '';
-                    document.getElementById('modelGuid').value = selectedOption.dataset.modelGuid || '';
-                }
-            };
+            allRevitFiles = data.files.map((file, index) => ({
+                ...file,
+                index,
+                publishStatus: 'unknown'
+            }));
             
-            showMessage('publishMessage', `Found ${data.total} Revit cloud model(s)`, 'success');
+            renderFilesList();
+            updateFileSelection();
+            showMessage('publishMessage', `Found ${data.total} Revit cloud model(s). Click "Check Publish Status" to see which need publishing.`, 'success');
         } else {
             showMessage('publishMessage', `Error loading Revit files: ${data.error}`, 'error');
         }
@@ -575,10 +698,317 @@ async function loadRevitFiles(projectId, folderId) {
     }
 }
 
+function renderFilesList() {
+    const filesList = document.getElementById('rvtFilesList');
+    filesList.innerHTML = '';
+    
+    allRevitFiles.forEach((file) => {
+        const checkboxItem = document.createElement('div');
+        checkboxItem.className = 'file-checkbox-item';
+        checkboxItem.dataset.fileId = file.id;
+        checkboxItem.dataset.projectGuid = file.projectGuid;
+        checkboxItem.dataset.modelGuid = file.modelGuid;
+        checkboxItem.dataset.itemId = file.id;
+        checkboxItem.dataset.fileName = file.name;
+        checkboxItem.dataset.publishStatus = file.publishStatus || 'unknown';
+        checkboxItem.dataset.index = file.index;
+        
+        const checkboxId = `file-checkbox-${file.index}`;
+        
+        let statusBadge = '';
+        const modelTypeInfo = file.modelType ? ` (${file.modelType})` : '';
+        
+        if (file.publishStatus === 'published') {
+            statusBadge = `<span class="publish-status-badge status-published" title="Published${modelTypeInfo}">✓ Published</span>`;
+        } else if (file.publishStatus === 'needs_publishing') {
+            statusBadge = `<span class="publish-status-badge status-needs-publishing" title="Needs Publishing${modelTypeInfo}">⚠ Needs Publishing</span>`;
+        } else if (file.publishStatus === 'not_published_yet') {
+            statusBadge = `<span class="publish-status-badge status-needs-publishing" title="Not published yet - Only files published after Feb 7, 2025 are supported${modelTypeInfo}">⚠ Not Published</span>`;
+        } else if (file.publishStatus === 'not_cloud_model') {
+            statusBadge = '<span class="publish-status-badge status-not-c4r" title="This is not a Revit Cloud Model">✗ Not Cloud Model</span>';
+        } else if (file.publishStatus === 'checking') {
+            statusBadge = '<span class="publish-status-badge status-checking">🔄 Checking...</span>';
+        } else {
+            statusBadge = `<span class="publish-status-badge status-unknown" title="${modelTypeInfo}">? Unknown</span>`;
+        }
+        
+        checkboxItem.innerHTML = `
+            <input type="checkbox" id="${checkboxId}" onchange="updateFileSelection()">
+            <label for="${checkboxId}" style="flex: 1;">${file.name} (v${file.versionNumber})</label>
+            ${statusBadge}
+        `;
+        
+        // Click on the item (not checkbox or badge) toggles checkbox
+        checkboxItem.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT' && !e.target.classList.contains('publish-status-badge')) {
+                const checkbox = checkboxItem.querySelector('input[type="checkbox"]');
+                checkbox.checked = !checkbox.checked;
+                updateFileSelection();
+            }
+        });
+        
+        filesList.appendChild(checkboxItem);
+    });
+    
+    filterFilesByStatus();
+}
+
 async function onHubSelected() {
     // Legacy function - now using selectHub
 }
 
 async function onProjectSelected() {
     // Legacy function - now using selectProject
+}
+
+function updateFileSelection() {
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]');
+    const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+    
+    document.getElementById('fileSelectionCount').textContent = `${checkedCount} file${checkedCount !== 1 ? 's' : ''} selected`;
+    
+    // Update visual styling for checked items
+    checkboxes.forEach(checkbox => {
+        const item = checkbox.closest('.file-checkbox-item');
+        if (checkbox.checked) {
+            item.classList.add('checked');
+        } else {
+            item.classList.remove('checked');
+        }
+    });
+    
+    // If exactly one file is selected, populate the GUIDs for backward compatibility
+    if (checkedCount === 1) {
+        const checkedItem = Array.from(checkboxes).find(cb => cb.checked).closest('.file-checkbox-item');
+        document.getElementById('projectGuid').value = checkedItem.dataset.projectGuid || '';
+        document.getElementById('modelGuid').value = checkedItem.dataset.modelGuid || '';
+    } else if (checkedCount > 1) {
+        document.getElementById('projectGuid').value = 'Multiple files selected';
+        document.getElementById('modelGuid').value = 'Multiple files selected';
+    }
+}
+
+function selectAllFiles() {
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = true);
+    updateFileSelection();
+}
+
+function deselectAllFiles() {
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = false);
+    updateFileSelection();
+}
+
+async function checkPublishStatus() {
+    if (!sessionId) {
+        showMessage('publishMessage', 'Please login first', 'error');
+        return;
+    }
+
+    if (!selectedProjectId || allRevitFiles.length === 0) {
+        showMessage('publishMessage', 'Please select a project and load files first', 'error');
+        return;
+    }
+
+    try {
+        showMessage('publishMessage', 'Checking publish status for all files...', 'info');
+        
+        // Update UI to show "checking" status
+        allRevitFiles.forEach(file => {
+            file.publishStatus = 'checking';
+        });
+        renderFilesList();
+
+        const projectGuidClean = selectedProjectId.startsWith('b.') ? selectedProjectId : `b.${selectedProjectId}`;
+        
+        const response = await fetch('/api/data-management/batch-publish-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionId}`
+            },
+            body: JSON.stringify({
+                projectId: projectGuidClean,
+                files: allRevitFiles.map(f => ({
+                    itemId: f.id,
+                    fileName: f.name,
+                    isCloudModel: f.isCloudModel,
+                    modelType: f.modelType
+                }))
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Server error response:', errorText);
+            throw new Error(`Server returned ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            // Update file statuses
+            data.results.forEach(result => {
+                const file = allRevitFiles.find(f => f.id === result.itemId);
+                if (file) {
+                    file.publishStatus = result.status;
+                    file.modelType = result.modelType;
+                    file.publishStatusDetails = result.publishStatus;
+                }
+            });
+
+            renderFilesList();
+            
+            const needsPublishing = data.results.filter(r => r.status === 'needs_publishing' || r.status === 'not_published_yet').length;
+            const published = data.results.filter(r => r.status === 'published').length;
+            const notCloudModel = data.results.filter(r => r.status === 'not_cloud_model').length;
+            const unknown = data.results.filter(r => r.status === 'unknown').length;
+            
+            let message = `Status check complete: ${published} published, ${needsPublishing} need publishing`;
+            if (notCloudModel > 0) {
+                message += `, ${notCloudModel} not cloud models`;
+            }
+            if (unknown > 0) {
+                message += `, ${unknown} unknown`;
+            }
+            
+            showMessage('publishMessage', message, 'success');
+        } else {
+            showMessage('publishMessage', `Error checking status: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        showMessage('publishMessage', `Failed to check publish status: ${error.message}`, 'error');
+        // Reset to unknown status
+        allRevitFiles.forEach(file => {
+            file.publishStatus = 'unknown';
+        });
+        renderFilesList();
+    }
+}
+
+function filterFilesByStatus() {
+    const selectedFilter = document.querySelector('input[name="fileFilter"]:checked')?.value || 'all';
+    const items = document.querySelectorAll('.file-checkbox-item');
+    
+    items.forEach(item => {
+        const status = item.dataset.publishStatus;
+        
+        if (selectedFilter === 'all') {
+            item.classList.remove('hidden');
+        } else if (selectedFilter === 'published' && status === 'published') {
+            item.classList.remove('hidden');
+        } else if (selectedFilter === 'unpublished') {
+            // Show all unpublished files (needs_publishing, not_published_yet, unknown, checking)
+            const unpublishedStatuses = ['needs_publishing', 'not_published_yet', 'unknown', 'checking'];
+            if (unpublishedStatuses.includes(status)) {
+                item.classList.remove('hidden');
+            } else {
+                item.classList.add('hidden');
+            }
+        } else {
+            item.classList.add('hidden');
+        }
+    });
+    
+    updateFileSelection();
+}
+
+/**
+ * Check status of current WorkItems
+ */
+async function checkWorkItemsStatus() {
+    if (!window.currentWorkItems || window.currentWorkItems.length === 0) {
+        showMessage('publishMessage', 'No WorkItems to check. Publish some files first.', 'error');
+        addLog('❌ No WorkItems tracked. Publish files first.', 'error');
+        return;
+    }
+
+    try {
+        addLog('\n🔍 Checking status of WorkItems...', 'info');
+        addLog(`Sending request for ${window.currentWorkItems.length} WorkItems...`, 'info');
+        console.log('WorkItems to check:', window.currentWorkItems);
+        
+        const response = await fetch('/api/design-automation/workitems/batch-status', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                sessionId,
+                workItems: window.currentWorkItems
+            })
+        });
+
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (response.ok && data.results) {
+            addLog('\n📊 WorkItem Status Report:', 'info');
+            
+            let completed = 0;
+            let pending = 0;
+            let inProgress = 0;
+            let failed = 0;
+
+            data.results.forEach(item => {
+                const statusIcon = item.status === 'success' ? '✓' : 
+                                   item.status === 'failed' ? '✗' : 
+                                   item.status === 'inprogress' ? '⏳' : 
+                                   item.status === 'pending' ? '⏸' : 
+                                   item.status === 'error' ? '❌' : '?';
+                
+                addLog(`  ${statusIcon} ${item.fileName}: ${item.status}`, 
+                       item.status === 'success' ? 'success' : 
+                       item.status === 'failed' || item.status === 'error' ? 'error' : 'info');
+                
+                if (item.error) {
+                    addLog(`     Error: ${JSON.stringify(item.error)}`, 'error');
+                }
+                
+                if (item.stats) {
+                    addLog(`     Time: ${item.stats.timeQueued || 0}s queued, ${item.stats.timeDownloadingInputsTotalTime || 0}s downloading, ${item.stats.timeInstructionsTotalTime || 0}s processing`);
+                }
+                
+                if (item.reportUrl) {
+                    addLog(`     Report: ${item.reportUrl}`);
+                }
+
+                // Count statuses
+                if (item.status === 'success') completed++;
+                else if (item.status === 'pending') pending++;
+                else if (item.status === 'inprogress') inProgress++;
+                else if (item.status === 'failed' || item.status === 'error') failed++;
+            });
+
+            addLog(`\n📈 Summary: ${completed} completed, ${inProgress} in progress, ${pending} pending, ${failed} failed`, 'info');
+            
+            // Update button text
+            const statusButton = document.getElementById('checkWorkItemsStatus');
+            if (statusButton) {
+                if (completed + failed === window.currentWorkItems.length) {
+                    statusButton.textContent = '✓ All Complete';
+                    statusButton.disabled = true;
+                } else {
+                    statusButton.textContent = `Refresh Status (${inProgress + pending} running)`;
+                }
+            }
+
+            const successMsg = completed === window.currentWorkItems.length 
+                ? `All ${completed} WorkItems completed successfully!`
+                : `Status: ${completed}/${window.currentWorkItems.length} completed`;
+            
+            showMessage('publishMessage', successMsg, completed === window.currentWorkItems.length ? 'success' : 'info');
+        } else {
+            addLog(`❌ Error from server: ${JSON.stringify(data)}`, 'error');
+            showMessage('publishMessage', `Error checking status: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('checkWorkItemsStatus error:', error);
+        addLog(`❌ Request failed: ${error.message}`, 'error');
+        showMessage('publishMessage', `Failed to check WorkItems status: ${error.message}`, 'error');
+    }
 }

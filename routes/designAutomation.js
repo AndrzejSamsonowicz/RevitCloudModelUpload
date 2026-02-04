@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const designAutomation = require('../services/designAutomation');
 const authRoutes = require('./auth');
+const axios = require('axios');
+const apsClient = require('../services/apsClient');
 
 const upload = multer({ dest: 'tmp/' });
 
@@ -26,7 +29,7 @@ router.post('/setup/nickname', async (req, res, next) => {
 });
 
 /**
- * Upload AppBundle
+ * Upload AppBundle (manual file upload)
  */
 router.post('/appbundle/upload', upload.single('bundle'), async (req, res, next) => {
     try {
@@ -36,6 +39,33 @@ router.post('/appbundle/upload', upload.single('bundle'), async (req, res, next)
 
         const engineVersion = req.body.engineVersion || '2024';
         const result = await designAutomation.uploadAppBundle(req.file.path, engineVersion);
+        
+        res.json({ 
+            success: true, 
+            data: result,
+            message: 'AppBundle uploaded successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * Auto-upload AppBundle from server's RevitAppBundle folder
+ */
+router.post('/appbundle/auto-upload', async (req, res, next) => {
+    try {
+        const engineVersion = req.body.engineVersion || '2024';
+        const bundlePath = path.join(__dirname, '..', 'RevitAppBundle', 'RevitCloudPublisher.zip');
+        
+        if (!fs.existsSync(bundlePath)) {
+            return res.status(404).json({ 
+                error: 'RevitCloudPublisher.zip not found. Please build the AppBundle first using build-appbundle.ps1',
+                path: bundlePath
+            });
+        }
+
+        const result = await designAutomation.uploadAppBundle(bundlePath, engineVersion);
         
         res.json({ 
             success: true, 
@@ -110,6 +140,78 @@ router.get('/workitem/:workItemId/status', async (req, res, next) => {
     try {
         const result = await designAutomation.getWorkItemStatus(req.params.workItemId);
         res.json({ success: true, data: result });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * Check status of multiple WorkItems (batch)
+ */
+router.post('/workitems/batch-status', async (req, res, next) => {
+    try {
+        const { workItems, sessionId } = req.body; // Array of { workItemId, fileName }
+        
+        if (!workItems || !Array.isArray(workItems)) {
+            return res.status(400).json({ error: 'workItems array is required' });
+        }
+
+        if (!sessionId) {
+            return res.status(400).json({ error: 'sessionId is required' });
+        }
+
+        // Verify user session exists (but we'll use 2-legged token for DA API)
+        const userToken = authRoutes.getUserToken(sessionId);
+        if (!userToken) {
+            return res.status(401).json({ error: 'Session expired. Please login again.' });
+        }
+
+        // Get 2-legged token for Design Automation API
+        const appToken = await apsClient.get2LeggedToken(['code:all']);
+
+        const results = [];
+
+        console.log(`\n📊 Checking status for ${workItems.length} WorkItems...`);
+
+        for (const item of workItems) {
+            try {
+                console.log(`  Checking WorkItem: ${item.workItemId} (${item.fileName})`);
+                
+                const response = await axios.get(
+                    `https://developer.api.autodesk.com/da/us-east/v3/workitems/${item.workItemId}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${appToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                console.log(`  ✓ Status: ${response.data.status}`);
+
+                results.push({
+                    workItemId: item.workItemId,
+                    fileName: item.fileName,
+                    status: response.data.status,
+                    progress: response.data.progress || 'unknown',
+                    stats: response.data.stats,
+                    reportUrl: response.data.reportUrl
+                });
+            } catch (error) {
+                console.error(`  ✗ Error for ${item.fileName}:`, error.response?.data || error.message);
+                
+                results.push({
+                    workItemId: item.workItemId,
+                    fileName: item.fileName,
+                    status: 'error',
+                    error: error.response?.data || error.message
+                });
+            }
+        }
+
+        console.log(`✓ Status check complete\n`);
+
+        res.json({ success: true, results });
     } catch (error) {
         next(error);
     }

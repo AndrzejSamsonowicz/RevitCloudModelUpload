@@ -265,6 +265,78 @@
         .log-entry.warning {
             color: #ff9800;
         }
+
+        .file-checkbox-item {
+            padding: 8px;
+            margin: 4px 0;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-checkbox-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .file-checkbox-item input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .file-checkbox-item label {
+            cursor: pointer;
+            margin: 0;
+            flex: 1;
+            font-weight: normal;
+            color: #333;
+        }
+
+        .file-checkbox-item.checked {
+            background-color: #e8eaf6;
+            border-color: #667eea;
+        }
+
+        .publish-status-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .status-published {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-needs-publishing {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .status-unknown {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+
+        .status-not-c4r {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-checking {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .file-checkbox-item.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -285,33 +357,9 @@
                 </div>
             </div>
 
-            <!-- Design Automation Setup Section -->
-            <div class="setup-section">
-                <h2 class="section-title">2. Design Automation Setup</h2>
-                <div id="setupMessage"></div>
-                
-                <div class="form-group">
-                    <label>AppBundle (RevitCloudPublisher.zip):</label>
-                    <input type="file" id="appBundleFile" accept=".zip">
-                    <button onclick="uploadAppBundle()">📤 Upload AppBundle</button>
-                </div>
-
-                <div class="form-group">
-                    <label for="engineVersion">Revit Engine Version:</label>
-                    <select id="engineVersion">
-                        <option value="2024">Revit 2024</option>
-                        <option value="2025">Revit 2025</option>
-                        <option value="2026" selected>Revit 2026</option>
-                    </select>
-                    <button onclick="createActivity()">⚙️ Create Activity</button>
-                </div>
-
-                <div id="setupLog" class="log hidden"></div>
-            </div>
-
             <!-- Project Selection Section -->
             <div class="publish-section">
-                <h2 class="section-title">3. Select Project & Revit File</h2>
+                <h2 class="section-title">2. Select Project & Revit File</h2>
                 <div id="publishMessage"></div>
                 
                 <div class="form-group">
@@ -340,42 +388,32 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="rvtFileSelect">Revit Cloud Models:</label>
-                    <select id="rvtFileSelect">
-                        <option value="">Select a project to load Revit files...</option>
-                    </select>
-                </div>
-
-                <div class="grid">
-                    <div class="form-group">
-                        <label for="region">Region:</label>
-                        <select id="region">
-                            <option value="US">US</option>
-                            <option value="EMEA">EMEA</option>
-                        </select>
+                    <label>Revit Cloud Models:</label>
+                    <div class="file-selection-controls" style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <button onclick="selectAllFiles()" class="secondary" style="padding: 6px 12px; font-size: 12px;">Select All</button>
+                        <button onclick="deselectAllFiles()" class="secondary" style="padding: 6px 12px; font-size: 12px;">Deselect All</button>
+                        <button onclick="checkPublishStatus()" class="secondary" style="padding: 6px 12px; font-size: 12px;">🔄 Check Publish Status</button>
+                        <span id="fileSelectionCount" style="color: #666; padding: 6px; font-size: 14px;">0 files selected</span>
+                        <div style="display: flex; gap: 10px; margin-left: auto;">
+                            <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0;">
+                                <input type="radio" name="fileFilter" value="all" checked onchange="filterFilesByStatus()"> All
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0;">
+                                <input type="radio" name="fileFilter" value="unpublished" onchange="filterFilesByStatus()"> Unpublished
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; margin: 0;">
+                                <input type="radio" name="fileFilter" value="published" onchange="filterFilesByStatus()"> Published
+                            </label>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="revitVersion">Revit Version:</label>
-                        <select id="revitVersion">
-                            <option value="2024">2024</option>
-                            <option value="2025">2025</option>
-                            <option value="2026" selected>2026</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid">
-                    <div class="form-group">
-                        <label for="projectGuid">Project GUID:</label>
-                        <input type="text" id="projectGuid" placeholder="Auto-filled from selection" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="modelGuid">Model GUID:</label>
-                        <input type="text" id="modelGuid" placeholder="Auto-filled from file selection" readonly>
+                    <div id="rvtFilesList" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; max-height: 300px; overflow-y: auto; background: white;">
+                        <div style="color: #999; text-align: center; padding: 20px;">Select a project to load Revit files...</div>
                     </div>
                 </div>
 
-                <button onclick="publishModel()">🚀 Publish Cloud Model</button>
+                <button onclick="publishModel()">📤 Publish Selected Files to Cloud</button>
+                <button onclick="checkCommandStatus()" style="background: #6c757d;">🔍 Check Command Status</button>
+
 
                 <div id="workItemLog" class="log hidden"></div>
             </div>

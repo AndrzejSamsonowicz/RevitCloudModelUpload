@@ -105,7 +105,10 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
             lastModifiedTime: item.attributes.lastModifiedTime,
             fileType: item.attributes.fileType,
             versionNumber: item.attributes.versionNumber,
-            // Extract cloud model GUIDs from extension data
+            // Extract cloud model data
+            extensionType: item.attributes?.extension?.type,
+            modelType: item.attributes?.extension?.data?.modelType,
+            isCloudModel: item.attributes?.extension?.type?.includes('C4RModel'),
             projectGuid: item.attributes?.extension?.data?.projectGuid,
             modelGuid: item.attributes?.extension?.data?.modelGuid
         }));
@@ -246,6 +249,137 @@ router.post('/publish-status/:itemId', getAccessToken, async (req, res) => {
         console.error('Error getting publish status:', error.response?.data || error.message);
         res.status(error.response?.status || 500).json({
             error: error.response?.data || error.message
+        });
+    }
+});
+
+// Batch check publish status for multiple files
+router.post('/batch-publish-status', getAccessToken, async (req, res) => {
+    try {
+        const { files, projectId } = req.body;
+
+        if (!projectId || !files || !Array.isArray(files)) {
+            return res.status(400).json({ error: 'projectId and files array are required' });
+        }
+
+        const results = [];
+
+        for (const file of files) {
+            try {
+                // Check if it's a cloud model
+                if (!file.isCloudModel) {
+                    results.push({
+                        itemId: file.itemId,
+                        fileName: file.fileName,
+                        needsPublishing: null,
+                        status: 'not_cloud_model',
+                        modelType: 'Not a Revit Cloud Model'
+                    });
+                    continue;
+                }
+
+                // Use new RCM API to get publish status
+                // Extract versionId from itemId (it's actually the version ID)
+                const versionId = file.itemId;
+                
+                const response = await axios.get(
+                    `https://developer.api.autodesk.com/construction/rcm/v1/projects/${projectId}/published-versions/${encodeURIComponent(versionId)}/linked-files`,
+                    {
+                        headers: { 'Authorization': `Bearer ${req.accessToken}` }
+                    }
+                );
+
+                // Check host file publish status
+                const hostFile = response.data.hostFile;
+                const isPublished = hostFile?.publishStatus === 'Published';
+                const modelType = file.modelType || 'unknown';
+
+                results.push({
+                    itemId: file.itemId,
+                    fileName: file.fileName,
+                    needsPublishing: !isPublished,
+                    status: isPublished ? 'published' : 'needs_publishing',
+                    modelType: modelType === 'multiuser' ? 'Cloud Workshared (C4R)' : modelType === 'singleuser' ? 'Single-user Cloud Model' : modelType,
+                    publishStatus: hostFile?.publishStatus,
+                    size: hostFile?.size
+                });
+            } catch (error) {
+                // Handle errors (suppress logging for expected "old file" errors)
+                const errorTitle = error.response?.data?.title || '';
+                const errorDetail = error.response?.data?.detail || error.message;
+                
+                if (errorTitle !== 'NotFound' && errorTitle !== 'Forbidden') {
+                    console.error(`Error checking status for ${file.fileName}:`, error.response?.data || error.message);
+                }
+                
+                const is404 = error.response?.status === 404 || errorTitle === 'NotFound';
+                const isForbidden = error.response?.status === 403 || errorTitle === 'Forbidden';
+                
+                let status = 'unknown';
+                let errorMessage = errorDetail;
+                
+                if (is404 && errorDetail?.includes('published before')) {
+                    status = 'not_published_yet';
+                    errorMessage = 'Published before Feb 7, 2025 (use legacy publish check)';
+                } else if (isForbidden && errorDetail?.includes('model copies')) {
+                    status = 'unknown';
+                    errorMessage = 'Model copy - status check not available';
+                } else if (is404) {
+                    status = 'not_published_yet';
+                    errorMessage = 'Not published or old version';
+                }
+                
+                results.push({
+                    itemId: file.itemId,
+                    fileName: file.fileName,
+                    needsPublishing: null,
+                    status: status,
+                    modelType: file.modelType || 'unknown',
+                    error: errorMessage
+                });
+            }
+
+            // Small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        res.json({ success: true, results });
+    } catch (error) {
+        console.error('Error in batch publish status:', error);
+        res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+// Check command status by command ID
+router.get('/commands/:commandId', getAccessToken, async (req, res) => {
+    try {
+        const { commandId } = req.params;
+        const { projectId } = req.query;
+
+        if (!projectId) {
+            return res.status(400).json({ error: 'projectId query parameter is required' });
+        }
+
+        console.log('Checking command status:', { commandId, projectId });
+
+        const response = await axios.get(
+            `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands/${commandId}`,
+            {
+                headers: { 'Authorization': `Bearer ${req.accessToken}` }
+            }
+        );
+
+        console.log('Command status response:', response.data);
+        res.json({
+            success: true,
+            command: response.data.data
+        });
+    } catch (error) {
+        console.error('Error checking command status:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.errors?.[0]?.detail || error.response?.data || error.message
         });
     }
 });
