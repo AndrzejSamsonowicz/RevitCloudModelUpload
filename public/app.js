@@ -473,10 +473,11 @@ async function publishModelToBim360(itemId, projectId) {
 // Utility functions
 function showMessage(elementId, message, type) {
     const element = document.getElementById(elementId);
+    if (!element) return; // Skip if element doesn't exist
     element.innerHTML = `<div class="alert ${type}">${message}</div>`;
     
     setTimeout(() => {
-        if (element.innerHTML.includes(message)) {
+        if (element && element.innerHTML.includes(message)) {
             element.innerHTML = '';
         }
     }, 5000);
