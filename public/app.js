@@ -198,11 +198,13 @@ async function setNickname() {
 }
 
 async function autoUploadAppBundle() {
-    const engineVersion = document.getElementById('engineVersion').value;
+    const engineVersionEl = document.getElementById('engineVersion');
+    const engineVersion = engineVersionEl ? engineVersionEl.value : '2024';
 
     try {
         showMessage('setupMessage', 'Auto-uploading AppBundle...', 'info');
-        document.getElementById('setupLog').classList.remove('hidden');
+        const setupLog = document.getElementById('setupLog');
+        if (setupLog) setupLog.classList.remove('hidden');
         addLog('Auto-uploading RevitCloudPublisher.zip from server...', '', 'setupLog');
 
         const response = await fetch('/api/design-automation/appbundle/auto-upload', {
@@ -1023,11 +1025,15 @@ function updateFileSelection() {
     // If exactly one file is selected, populate the GUIDs for backward compatibility
     if (checkedCount === 1) {
         const checkedItem = Array.from(checkboxes).find(cb => cb.checked).closest('.file-checkbox-item');
-        document.getElementById('projectGuid').value = checkedItem.dataset.projectGuid || '';
-        document.getElementById('modelGuid').value = checkedItem.dataset.modelGuid || '';
+        const projectGuidEl = document.getElementById('projectGuid');
+        const modelGuidEl = document.getElementById('modelGuid');
+        if (projectGuidEl) projectGuidEl.value = checkedItem.dataset.projectGuid || '';
+        if (modelGuidEl) modelGuidEl.value = checkedItem.dataset.modelGuid || '';
     } else if (checkedCount > 1) {
-        document.getElementById('projectGuid').value = 'Multiple files selected';
-        document.getElementById('modelGuid').value = 'Multiple files selected';
+        const projectGuidEl = document.getElementById('projectGuid');
+        const modelGuidEl = document.getElementById('modelGuid');
+        if (projectGuidEl) projectGuidEl.value = 'Multiple files selected';
+        if (modelGuidEl) modelGuidEl.value = 'Multiple files selected';
     }
 }
 
