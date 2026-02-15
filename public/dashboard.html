@@ -655,6 +655,14 @@
                 
                 const data = await response.json();
                 
+                // Check if user is admin (dashboard is admin-only)
+                if (!data.user.isAdmin) {
+                    alert('Access denied. The dashboard is only accessible to administrators.');
+                    await firebaseAuth.signOut();
+                    window.location.href = '/login';
+                    return;
+                }
+                
                 // Update user info in header
                 document.getElementById('userEmail').textContent = data.user.email;
                 
