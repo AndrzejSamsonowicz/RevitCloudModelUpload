@@ -323,8 +323,8 @@
                     const token = await user.getIdToken();
                     
                     // Validate login with server
-                    const response = await fetch(`${window.location.origin}/api/validate-login`, {
-                        method: 'POST',
+                    const response = await fetch(`${window.location.origin}/api/auth/verify`, {
+                        method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -333,20 +333,26 @@
                     const data = await response.json();
                     
                     if (!response.ok || !data.success) {
-                        if (data.redirectTo) {
-                            showAlert(data.error || 'License validation failed', 'error');
-                            await auth.signOut();
-                            window.location.href = data.redirectTo;
-                        } else {
-                            showAlert(data.error || 'Login validation failed', 'error');
-                            await auth.signOut();
-                        }
+                        showAlert(data.error || 'Login validation failed', 'error');
+                        await auth.signOut();
                         return;
                     }
                     
+                    // Update last login time
+                    await fetch(`${window.location.origin}/api/auth/update-last-login`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
                     // Redirect based on user role
                     showAlert('Login successful! Redirecting...', 'success');
-                    window.location.href = data.redirectTo;
+                    if (data.user.isAdmin) {
+                        window.location.href = '/admin';
+                    } else {
+                        window.location.href = '/dashboard';
+                    }
                     
                 } catch (error) {
                     console.error('Error validating login:', error);
