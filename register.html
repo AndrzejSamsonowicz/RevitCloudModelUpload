@@ -427,14 +427,18 @@
                 }
                 
                 const successMessage = licenseKey 
-                    ? '✅ Account created successfully! Please check your email to verify your account.' 
-                    : '✅ Account created successfully! Please check your email to verify. You can add a license key from the purchase page.';
+                    ? '✅ Account created successfully! Check your email (including spam folder) to verify your account. Redirecting to login...' 
+                    : '✅ Account created successfully! Check your email (including spam folder) to verify. Redirecting to login...';
                 showAlert(successMessage, 'success');
                 
-                // Redirect to login after 3 seconds
+                // Disable form
+                document.getElementById('registerForm').style.opacity = '0.5';
+                document.getElementById('registerForm').style.pointerEvents = 'none';
+                
+                // Redirect to login after 2 seconds
                 setTimeout(() => {
                     window.location.href = 'login.html';
-                }, 3000);
+                }, 2000);
                 
             } catch (error) {
                 console.error('Registration error:', error);
