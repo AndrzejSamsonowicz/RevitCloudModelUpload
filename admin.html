@@ -439,7 +439,7 @@
         <h1>🎯 Revit Cloud Model Publisher - Admin</h1>
         <div class="header-info">
             <span id="adminEmail"></span>
-            <button class="logout-btn" onclick="window.location.href='index.html'" style="margin-right: 10px;">Go to App</button>
+            <button class="logout-btn" onclick="window.location.href='/dashboard'" style="margin-right: 10px;">Go to Dashboard</button>
             <button class="logout-btn" onclick="handleLogout()">Logout</button>
         </div>
     </div>
@@ -752,19 +752,19 @@
         auth.onAuthStateChanged(async (user) => {
             if (!user) {
                 // Not logged in - redirect to login
-                window.location.replace('login.html');
+                window.location.replace('/login');
                 return;
             }
             
             try {
-                // Check if user is admin in Firestore admins collection
-                const adminDoc = await db.collection('admins').doc(user.uid).get();
+                // Check if user is admin in Firestore users collection
+                const userDoc = await db.collection('users').doc(user.uid).get();
                 
-                if (!adminDoc.exists) {
+                if (!userDoc.exists || !userDoc.data().isAdmin) {
                     // User is authenticated but NOT an admin - deny access
                     console.warn('Access denied: User is not an admin');
                     await auth.signOut();
-                    window.location.replace('login.html');
+                    window.location.replace('/login');
                     return;
                 }
                 
@@ -780,7 +780,7 @@
                 console.error('Admin check error:', error);
                 // Error verifying admin status - deny access for security
                 await auth.signOut();
-                window.location.replace('login.html');
+                window.location.replace('/login');
             }
         });
         
@@ -1476,7 +1476,7 @@
         // Logout
         async function handleLogout() {
             await auth.signOut();
-            window.location.href = 'login.html';
+            window.location.href = '/login';
         }
         
         // Close modals on outside click
