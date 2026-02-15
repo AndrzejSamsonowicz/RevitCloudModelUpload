@@ -5,6 +5,10 @@ package-lock.json
 # Environment variables
 .env
 
+# Firebase service account (NEVER commit this!)
+firebase-service-account.json
+firebase-adminsdk-*.json
+
 # Logs
 *.log
 npm-debug.log*

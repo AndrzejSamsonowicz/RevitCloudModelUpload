@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revit Cloud Model Publisher - Dashboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Artifact+Elements:wght@400;700&display=swap');
+        
+        * {
+            font-family: 'Artifact Elements', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Artifact Elements', Arial, sans-serif;
+            background: white;
+            min-height: 100vh;
+        }
+
+        /* User Header */
+        .user-header {
+            background: linear-gradient(135deg, #0696D7 0%, #0057A0 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .user-header h1 {
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-email {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .license-status {
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .license-status.active {
+            background: #28a745;
+        }
+
+        .license-status.expired {
+            background: #dc3545;
+        }
+
+        .logout-button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .logout-button:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* Loading overlay */
+        .auth-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0696D7;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* No license message */
+        .no-license-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9998;
+        }
+
+        .no-license-card {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 500px;
+        }
+
+        .no-license-card h2 {
+            color: #dc3545;
+            margin-bottom: 20px;
+        }
+
+        .no-license-card p {
+            color: #6c757d;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .no-license-card .btn {
+            background-color: #0696D7;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background 0.2s;
+        }
+
+        .no-license-card .btn:hover {
+            background-color: #0057A0;
+        }
+
+        /* All existing styles from index.html */
+        button, .btn {
+            background-color: #0696D7 !important;
+            color: white !important;
+            padding: 12px 20px !important;
+            border: none !important;
+            border-radius: 5px !important;
+            cursor: pointer !important;
+            font-size: 14px !important;
+            font-family: 'Artifact Elements', Arial, sans-serif !important;
+            font-weight: 400 !important;
+            min-width: 120px !important;
+            height: 44px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: background-color 0.2s ease !important;
+            margin: 4px !important;
+        }
+        
+        button:hover, .btn:hover {
+            background-color: #0580C0 !important;
+        }
+        
+        button:active, .btn:active {
+            background-color: #046BA5 !important;
+        }
+
+        button:disabled {
+            background-color: #ccc !important;
+            cursor: not-allowed !important;
+        }
+
+        button.secondary {
+            background-color: #6c757d !important;
+        }
+
+        button.secondary:hover {
+            background-color: #5a6268 !important;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .hub-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 14px;
+            font-family: 'Artifact Elements', Arial, sans-serif;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .hub-name {
+            font-weight: 500;
+        }
+        
+        .hub-region {
+            color: #6c757d;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .hub-item:hover {
+            background-color: #e9ecef;
+        }
+        
+        .hub-item.selected {
+            background-color: #0696D7;
+            color: white;
+        }
+        
+        .hub-item.selected .hub-region {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .project-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 14px;
+        }
+
+        .project-item:hover {
+            background-color: #e9ecef;
+        }
+
+        .project-item.selected {
+            background-color: #0696D7;
+            color: white;
+        }
+        
+        .no-items {
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            font-family: 'Artifact Elements', Arial, sans-serif;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: 'Artifact Elements', Arial, sans-serif;
+        }
+
+        .file-checkbox-item {
+            padding: 8px;
+            margin: 4px 0;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        tr.file-checkbox-item {
+            display: table-row;
+            padding: 0;
+            margin: 0;
+            border: none;
+            border-radius: 0;
+            gap: 0;
+        }
+
+        .file-checkbox-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .file-checkbox-item input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .file-checkbox-item label {
+            cursor: pointer;
+            margin: 0;
+            flex: 1;
+            font-weight: normal;
+            color: #333;
+        }
+
+        .file-checkbox-item.checked {
+            background-color: #e8eaf6;
+            border-color: #0696D7;
+        }
+
+        .file-checkbox-item.hidden {
+            display: none;
+        }
+
+        th {
+            position: relative;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-entry.error {
+            color: #f44336;
+        }
+
+        .log-entry.success {
+            color: #4caf50;
+        }
+
+        .log-entry.info {
+            color: #2196f3;
+        }
+
+        .log-entry.warning {
+            color: #ff9800;
+        }
+
+        .credentials-modal {
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .credentials-modal-content {
+            background-color: #fefefe;
+            margin: 2% auto;
+            padding: 0;
+            border: 1px solid #888;
+            width: 95%;
+            max-width: 1000px;
+            max-height: 95vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            font-family: 'Artifact Elements', Arial, sans-serif;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .credentials-two-column {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .credentials-left-column, .credentials-right-column {
+            flex: 1;
+            min-width: 280px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .credentials-modal-header {
+            padding: 15px 20px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .credentials-modal-header h3 {
+            margin: 0;
+            color: #333;
+        }
+
+        .credentials-modal-close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .credentials-modal-close:hover {
+            color: #000;
+        }
+
+        .credentials-modal-body {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading overlay -->
+    <div id="authLoading" class="auth-loading">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; color: #666;">Verifying authentication...</p>
+    </div>
+
+    <!-- No license overlay -->
+    <div id="noLicenseOverlay" class="no-license-overlay" style="display: none;">
+        <div class="no-license-card">
+            <h2>🔒 License Required</h2>
+            <p>You need an active license to use Revit Cloud Model Publisher.</p>
+            <p id="licenseMessage">Your license has expired or is not activated.</p>
+            <a href="/purchase" class="btn">Purchase License</a>
+            <br><br>
+            <button class="logout-button" onclick="handleLogout()" style="background: transparent; color: #0696D7; border: 1px solid #0696D7;">Logout</button>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <div id="mainContent" style="display: none;">
+        <!-- User header -->
+        <div class="user-header">
+            <h1>Revit Cloud Model Publisher</h1>
+            <div class="user-info">
+                <span class="user-email" id="userEmail"></span>
+                <span class="license-status" id="licenseStatus"></span>
+                <button class="logout-button" onclick="handleLogout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- Main dashboard content (same as index.html) -->
+        <div style="margin: 0; padding: 0;">
+            <div id="login" style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 20px; margin-bottom: 20px; width: 200px;">
+                <button onclick="logout()" id="logoutBtn" style="width: 200px;">Logout</button>
+                <button onclick="showCredentialsModal()" id="settingsBtn" style="width: 200px;">Settings</button>
+                <button onclick="login()" id="loginBtn" style="width: 200px;">Login with Autodesk</button>
+            </div>
+            <div id="error" style="display: none; color: red; margin: 0 20px;"></div>
+            <div id="authMessage" style="margin: 0 20px;"></div>
+            
+            <div id="content" style="display: none;">
+                <div style="display: flex; padding: 20px; gap: 20px; height: calc(100vh - 200px);">
+                    <!-- Left column - Hubs and Projects -->
+                    <div style="width: 33.33%; display: flex; flex-direction: column; gap: 30px;">
+                        <div id="hubsPanel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                            <h3 style="margin-bottom: 15px; flex-shrink: 0;">Hubs</h3>
+                            <input type="text" class="filter-input" id="hubFilter" placeholder="Filter hubs..." oninput="filterHubs()" style="flex-shrink: 0;">
+                            <div id="hubsList" style="flex: 1; overflow-y: auto; margin-top: 10px;">
+                                <div class="no-items">Loading hubs...</div>
+                            </div>
+                        </div>
+                        
+                        <div id="projectsPanel" style="display: flex; flex-direction: column; flex: 2; overflow: hidden;">
+                            <div id="projectsHeader" style="display: none; flex-shrink: 0;">
+                                <h3 id="selectedHubTitle" style="margin-bottom: 15px;"></h3>
+                                <input type="text" class="filter-input" id="projectFilter" placeholder="Filter projects..." oninput="filterProjects()">
+                            </div>
+                            <div id="projectsList" style="flex: 1; overflow-y: auto;">
+                                <div class="no-items">Select a hub to view projects</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right column - Revit Cloud Models -->
+                    <div style="width: 66.67%; border-left: 2px solid #ddd; padding-left: 20px; display: flex; flex-direction: column; overflow: hidden;">
+                        <div id="filesSection" style="flex: 1; flex-direction: column; overflow: hidden;">
+                            <h3 style="margin-bottom: 15px; flex-shrink: 0;">Revit Cloud Models</h3>
+                            <div id="publishMessage" style="flex-shrink: 0;"></div>
+                            
+                            <div class="file-selection-controls" style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex-shrink: 0;">
+                                <button onclick="selectAllFiles()" class="secondary" style="padding: 6px 12px; font-size: 12px; min-width: 80px !important; height: 32px !important;">Select All</button>
+                                <button onclick="deselectAllFiles()" class="secondary" style="padding: 6px 12px; font-size: 12px; min-width: 80px !important; height: 32px !important;">Deselect All</button>
+                                <span id="fileSelectionCount" style="color: #666; padding: 6px; font-size: 14px;">0 files selected</span>
+                            </div>
+                            
+                            <div id="rvtFilesList" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; overflow-y: auto; background: white; margin-bottom: 15px; flex: 1; min-height: 0;">
+                                <div style="color: #999; text-align: center; padding: 20px;">Loading files...</div>
+                            </div>
+
+                            <div style="flex-shrink: 0;">
+                                <button onclick="publishModel()">📤 Publish Selected Files to Cloud</button>
+                            </div>
+
+                            <div id="workItemLog" class="log hidden"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Credentials Modal -->
+        <div id="credentialsModal" class="credentials-modal" style="display: none;">
+            <div class="credentials-modal-content">
+                <div class="credentials-modal-header">
+                    <h3>Enter your APS application Client Credentials</h3>
+                    <span class="credentials-modal-close" onclick="closeCredentialsModal()">&times;</span>
+                </div>
+                <div class="credentials-modal-body">
+                    <div class="credentials-two-column">
+                        <div class="credentials-left-column">
+                            <div style="margin-bottom: 20px; max-width: 450px;">
+                                <button onclick="openApsGuide()" style="width: 100%; box-sizing: border-box;">
+                                    How to create an APS app
+                                </button>
+                            </div>
+                            <div style="margin-bottom: 20px; max-width: 450px;">
+                                <div style="padding: 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; color: #495057; box-sizing: border-box; width: 450px;">
+                                    In your app General Settings add the Callback URL: <strong>http://localhost:3000/oauth/callback</strong>
+                                </div>
+                            </div>
+                            <div style="text-align: center; max-width: 450px; width: 450px;">
+                                <img src="APS General Settings.png" alt="APS General Settings" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            </div>
+                        </div>
+                        <div class="credentials-right-column">
+                            <div style="margin-bottom: 15px; max-width: 450px;">
+                                <label for="clientIdInput" style="display: block; margin: 0 0 5px 0; font-weight: bold;">Client ID:</label>
+                                <input type="text" id="clientIdInput" placeholder="Enter your APS Client ID" 
+                                       style="width: 450px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin: 0;" />
+                            </div>
+                            <div style="margin-bottom: 20px; max-width: 450px;">
+                                <label for="clientSecretInput" style="display: block; margin: 0 0 5px 0; font-weight: bold;">Client Secret:</label>
+                                <input type="password" id="clientSecretInput" placeholder="Enter your APS Client Secret" 
+                                       style="width: 450px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin: 0;" />
+                                <small style="color: #666; font-style: italic;">Secret will be hidden for security</small>
+                            </div>
+                            <div id="saveCredentialsContainer">
+                                <button id="saveCredentialsBtn" onclick="saveCredentials()" style="width: 100%; box-sizing: border-box; margin: 0;">
+                                    Save Credentials (Encrypted)
+                                </button>
+                                <small style="color: #666; display: block; margin-top: 10px; text-align: center;">
+                                    Credentials are encrypted and stored securely in Firebase
+                                </small>
+                            </div>
+                            <div id="credentialsMessage" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
+    <!-- Firebase Config -->
+    <script src="firebase-config.js"></script>
+    
+    <!-- Authentication Script -->
+    <script>
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const firebaseAuth = firebase.auth();
+        
+        let currentUser = null;
+        let authToken = null;
+        
+        // Check authentication on page load
+        firebaseAuth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                // Not logged in, redirect to login page
+                window.location.href = '/login';
+                return;
+            }
+            
+            // Check if email is verified
+            if (!user.emailVerified) {
+                alert('Please verify your email address before accessing the dashboard. Check your inbox for a verification email.');
+                await firebaseAuth.signOut();
+                window.location.href = '/login';
+                return;
+            }
+            
+            currentUser = user;
+            
+            try {
+                // Get Firebase ID token
+                authToken = await user.getIdToken();
+                
+                // Verify user and check license
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to verify user');
+                }
+                
+                const data = await response.json();
+                
+                // Update user info in header
+                document.getElementById('userEmail').textContent = data.user.email;
+                
+                // Check license status
+                if (!data.user.hasActiveLicense) {
+                    // Show no license overlay
+                    document.getElementById('authLoading').style.display = 'none';
+                    document.getElementById('noLicenseOverlay').style.display = 'flex';
+                    
+                    if (data.user.licenseStatus === 'expired') {
+                        document.getElementById('licenseMessage').textContent = 
+                            'Your license has expired. Please renew to continue using the service.';
+                    } else if (data.user.licenseStatus === 'inactive') {
+                        document.getElementById('licenseMessage').textContent = 
+                            'Your license is not activated. Please contact support or purchase a new license.';
+                    } else {
+                        document.getElementById('licenseMessage').textContent = 
+                            'You need an active license to use this service. Purchase a license to get started.';
+                    }
+                    
+                    return;
+                }
+                
+                // License is active
+                const licenseStatus = document.getElementById('licenseStatus');
+                const expiryDate = new Date(data.user.licenseExpiry);
+                const daysRemaining = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+                
+                licenseStatus.textContent = `Active (${daysRemaining} days remaining)`;
+                licenseStatus.className = 'license-status active';
+                
+                // Hide loading, show main content
+                document.getElementById('authLoading').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                
+                // Update last login
+                await fetch('/api/auth/update-last-login', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Authentication error:', error);
+                alert('Failed to verify authentication. Please try logging in again.');
+                await firebaseAuth.signOut();
+                window.location.href = '/login';
+            }
+        });
+        
+        // Logout function
+        async function handleLogout() {
+            try {
+                await firebaseAuth.signOut();
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Logout error:', error);
+                alert('Failed to logout. Please try again.');
+            }
+        }
+    </script>
+    
+    <!-- Main app script -->
+    <script src="app.js"></script>
+</body>
+</html>
