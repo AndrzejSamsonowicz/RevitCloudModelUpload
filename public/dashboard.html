@@ -658,8 +658,8 @@
                 // Update user info in header
                 document.getElementById('userEmail').textContent = data.user.email;
                 
-                // Check license status
-                if (!data.user.hasActiveLicense) {
+                // Check license status (admins bypass license requirement)
+                if (!data.user.hasActiveLicense && !data.user.isAdmin) {
                     // Show no license overlay
                     document.getElementById('authLoading').style.display = 'none';
                     document.getElementById('noLicenseOverlay').style.display = 'flex';
@@ -678,13 +678,20 @@
                     return;
                 }
                 
-                // License is active
+                // License is active or user is admin
                 const licenseStatus = document.getElementById('licenseStatus');
-                const expiryDate = new Date(data.user.licenseExpiry);
-                const daysRemaining = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
                 
-                licenseStatus.textContent = `Active (${daysRemaining} days remaining)`;
-                licenseStatus.className = 'license-status active';
+                if (data.user.isAdmin && !data.user.hasActiveLicense) {
+                    // Admin without license
+                    licenseStatus.textContent = 'Admin Access';
+                    licenseStatus.className = 'license-status active';
+                } else if (data.user.hasActiveLicense) {
+                    // Regular user with active license
+                    const expiryDate = new Date(data.user.licenseExpiry);
+                    const daysRemaining = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+                    licenseStatus.textContent = `Active (${daysRemaining} days remaining)`;
+                    licenseStatus.className = 'license-status active';
+                }
                 
                 // Hide loading, show main content
                 document.getElementById('authLoading').style.display = 'none';
