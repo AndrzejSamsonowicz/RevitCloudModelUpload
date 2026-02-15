@@ -40,8 +40,8 @@ function showCredentialsModal() {
     const modal = document.getElementById('credentialsModal');
     const { clientId, clientSecret } = loadCredentials();
     
-    if (clientId) document.getElementById('clientId').value = clientId;
-    if (clientSecret) document.getElementById('clientSecret').value = clientSecret;
+    if (clientId) document.getElementById('clientIdInput').value = clientId;
+    if (clientSecret) document.getElementById('clientSecretInput').value = clientSecret;
     
     modal.style.display = 'block';
 }
@@ -53,12 +53,13 @@ function closeCredentialsModal() {
 }
 
 function saveCredentials() {
-    const clientId = document.getElementById('clientId').value.trim();
-    const clientSecret = document.getElementById('clientSecret').value.trim();
+    const clientId = document.getElementById('clientIdInput').value.trim();
+    const clientSecret = document.getElementById('clientSecretInput').value.trim();
     const messageDiv = document.getElementById('credentialsMessage');
     
     if (!clientId || !clientSecret) {
         messageDiv.textContent = 'Please enter both Client ID and Client Secret';
+        messageDiv.style.display = 'block';
         messageDiv.style.backgroundColor = '#ffebee';
         messageDiv.style.color = '#c62828';
         return;
@@ -68,6 +69,7 @@ function saveCredentials() {
     localStorage.setItem('APS_CLIENT_SECRET', clientSecret);
     
     messageDiv.textContent = 'Credentials saved successfully!';
+    messageDiv.style.display = 'block';
     messageDiv.style.backgroundColor = '#e8f5e9';
     messageDiv.style.color = '#2e7d32';
     
