@@ -96,22 +96,110 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
             }
         );
 
-        // Extract relevant file information including cloud model GUIDs
-        const rvtFiles = response.data.data.map(item => ({
-            id: item.id,
-            type: item.type,
-            name: item.attributes.displayName || item.attributes.name,
-            createTime: item.attributes.createTime,
-            lastModifiedTime: item.attributes.lastModifiedTime,
-            fileType: item.attributes.fileType,
-            versionNumber: item.attributes.versionNumber,
-            // Extract cloud model data
-            extensionType: item.attributes?.extension?.type,
-            modelType: item.attributes?.extension?.data?.modelType,
-            isCloudModel: item.attributes?.extension?.type?.includes('C4RModel'),
-            projectGuid: item.attributes?.extension?.data?.projectGuid,
-            modelGuid: item.attributes?.extension?.data?.modelGuid
-        }));
+        // Get unique item IDs (search returns versions, we need items to get parent folders)
+        const itemIds = [...new Set(
+            response.data.data
+                .map(version => version.relationships?.item?.data?.id)
+                .filter(id => id)
+        )];
+
+        console.log(`Found ${itemIds.length} unique items`);
+
+        // Fetch item details to get parent folder for each
+        const itemFolderMap = {};
+        const folderDetailsMap = {};
+        
+        await Promise.all(
+            itemIds.map(async (itemId) => {
+                try {
+                    // Get item to find parent folder
+                    const itemResponse = await axios.get(
+                        `https://developer.api.autodesk.com/data/v1/projects/${projectId}/items/${encodeURIComponent(itemId)}`,
+                        {
+                            headers: { 'Authorization': `Bearer ${req.accessToken}` }
+                        }
+                    );
+                    
+                    const parentFolderId = itemResponse.data.data.relationships?.parent?.data?.id;
+                    itemFolderMap[itemId] = parentFolderId;
+                    
+                    // Fetch folder details if we haven't already
+                    if (parentFolderId && !folderDetailsMap[parentFolderId]) {
+                        try {
+                            // Build full path by recursively following parent folders
+                            const pathParts = [];
+                            let currentFolderId = parentFolderId;
+                            const visitedFolders = new Set(); // Prevent infinite loops
+                            
+                            while (currentFolderId && !visitedFolders.has(currentFolderId)) {
+                                visitedFolders.add(currentFolderId);
+                                
+                                const folderResponse = await axios.get(
+                                    `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${encodeURIComponent(currentFolderId)}`,
+                                    {
+                                        headers: { 'Authorization': `Bearer ${req.accessToken}` }
+                                    }
+                                );
+                                
+                                const folderData = folderResponse.data.data;
+                                const folderName = folderData.attributes?.displayName || folderData.attributes?.name;
+                                
+                                if (folderName) {
+                                    pathParts.unshift(folderName); // Add to beginning of array
+                                }
+                                
+                                // Get parent folder ID to continue up the hierarchy
+                                currentFolderId = folderData.relationships?.parent?.data?.id;
+                                
+                                // Stop if we reach "Project Files" or a root folder
+                                if (folderName === 'Project Files' || !currentFolderId) {
+                                    break;
+                                }
+                            }
+                            
+                            // Remove "Project Files" from the path if present
+                            const filteredParts = pathParts.filter(part => part !== 'Project Files');
+                            const folderPath = '/' + filteredParts.join('/');
+                            folderDetailsMap[parentFolderId] = folderPath;
+                            console.log(`Built path for ${parentFolderId}: ${folderPath}`);
+                        } catch (folderError) {
+                            console.error(`Error fetching folder ${parentFolderId}:`, folderError.message);
+                            folderDetailsMap[parentFolderId] = '/Unknown';
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error fetching item ${itemId}:`, error.message);
+                }
+            })
+        );
+
+        console.log('Folder paths:', folderDetailsMap);
+
+        // Extract relevant file information including cloud model GUIDs and folder paths
+        const rvtFiles = response.data.data.map(version => {
+            const itemId = version.relationships?.item?.data?.id;
+            const parentFolderId = itemFolderMap[itemId];
+            const folderPath = parentFolderId ? (folderDetailsMap[parentFolderId] || '/') : '/';
+            
+            return {
+                id: version.id,
+                type: version.type,
+                name: version.attributes.displayName || version.attributes.name,
+                createTime: version.attributes.createTime,
+                lastModifiedTime: version.attributes.lastModifiedTime,
+                fileType: version.attributes.fileType,
+                versionNumber: version.attributes.versionNumber,
+                // Extract cloud model data
+                extensionType: version.attributes?.extension?.type,
+                modelType: version.attributes?.extension?.data?.modelType,
+                isCloudModel: version.attributes?.extension?.type?.includes('C4RModel'),
+                projectGuid: version.attributes?.extension?.data?.projectGuid,
+                modelGuid: version.attributes?.extension?.data?.modelGuid,
+                // Folder path from parent folder details
+                folderPath: folderPath,
+                publishedDate: version.attributes?.extension?.data?.publishedDate || null
+            };
+        });
 
         res.json({ files: rvtFiles, total: rvtFiles.length });
     } catch (error) {
@@ -249,137 +337,6 @@ router.post('/publish-status/:itemId', getAccessToken, async (req, res) => {
         console.error('Error getting publish status:', error.response?.data || error.message);
         res.status(error.response?.status || 500).json({
             error: error.response?.data || error.message
-        });
-    }
-});
-
-// Batch check publish status for multiple files
-router.post('/batch-publish-status', getAccessToken, async (req, res) => {
-    try {
-        const { files, projectId } = req.body;
-
-        if (!projectId || !files || !Array.isArray(files)) {
-            return res.status(400).json({ error: 'projectId and files array are required' });
-        }
-
-        const results = [];
-
-        for (const file of files) {
-            try {
-                // Check if it's a cloud model
-                if (!file.isCloudModel) {
-                    results.push({
-                        itemId: file.itemId,
-                        fileName: file.fileName,
-                        needsPublishing: null,
-                        status: 'not_cloud_model',
-                        modelType: 'Not a Revit Cloud Model'
-                    });
-                    continue;
-                }
-
-                // Use new RCM API to get publish status
-                // Extract versionId from itemId (it's actually the version ID)
-                const versionId = file.itemId;
-                
-                const response = await axios.get(
-                    `https://developer.api.autodesk.com/construction/rcm/v1/projects/${projectId}/published-versions/${encodeURIComponent(versionId)}/linked-files`,
-                    {
-                        headers: { 'Authorization': `Bearer ${req.accessToken}` }
-                    }
-                );
-
-                // Check host file publish status
-                const hostFile = response.data.hostFile;
-                const isPublished = hostFile?.publishStatus === 'Published';
-                const modelType = file.modelType || 'unknown';
-
-                results.push({
-                    itemId: file.itemId,
-                    fileName: file.fileName,
-                    needsPublishing: !isPublished,
-                    status: isPublished ? 'published' : 'needs_publishing',
-                    modelType: modelType === 'multiuser' ? 'Cloud Workshared (C4R)' : modelType === 'singleuser' ? 'Single-user Cloud Model' : modelType,
-                    publishStatus: hostFile?.publishStatus,
-                    size: hostFile?.size
-                });
-            } catch (error) {
-                // Handle errors (suppress logging for expected "old file" errors)
-                const errorTitle = error.response?.data?.title || '';
-                const errorDetail = error.response?.data?.detail || error.message;
-                
-                if (errorTitle !== 'NotFound' && errorTitle !== 'Forbidden') {
-                    console.error(`Error checking status for ${file.fileName}:`, error.response?.data || error.message);
-                }
-                
-                const is404 = error.response?.status === 404 || errorTitle === 'NotFound';
-                const isForbidden = error.response?.status === 403 || errorTitle === 'Forbidden';
-                
-                let status = 'unknown';
-                let errorMessage = errorDetail;
-                
-                if (is404 && errorDetail?.includes('published before')) {
-                    status = 'not_published_yet';
-                    errorMessage = 'Published before Feb 7, 2025 (use legacy publish check)';
-                } else if (isForbidden && errorDetail?.includes('model copies')) {
-                    status = 'unknown';
-                    errorMessage = 'Model copy - status check not available';
-                } else if (is404) {
-                    status = 'not_published_yet';
-                    errorMessage = 'Not published or old version';
-                }
-                
-                results.push({
-                    itemId: file.itemId,
-                    fileName: file.fileName,
-                    needsPublishing: null,
-                    status: status,
-                    modelType: file.modelType || 'unknown',
-                    error: errorMessage
-                });
-            }
-
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        res.json({ success: true, results });
-    } catch (error) {
-        console.error('Error in batch publish status:', error);
-        res.status(500).json({
-            error: error.message
-        });
-    }
-});
-
-// Check command status by command ID
-router.get('/commands/:commandId', getAccessToken, async (req, res) => {
-    try {
-        const { commandId } = req.params;
-        const { projectId } = req.query;
-
-        if (!projectId) {
-            return res.status(400).json({ error: 'projectId query parameter is required' });
-        }
-
-        console.log('Checking command status:', { commandId, projectId });
-
-        const response = await axios.get(
-            `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands/${commandId}`,
-            {
-                headers: { 'Authorization': `Bearer ${req.accessToken}` }
-            }
-        );
-
-        console.log('Command status response:', response.data);
-        res.json({
-            success: true,
-            command: response.data.data
-        });
-    } catch (error) {
-        console.error('Error checking command status:', error.response?.data || error.message);
-        res.status(error.response?.status || 500).json({
-            error: error.response?.data?.errors?.[0]?.detail || error.response?.data || error.message
         });
     }
 });
