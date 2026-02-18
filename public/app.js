@@ -1268,6 +1268,12 @@ function formatScheduleDisplay(schedule) {
 // Save all publishing schedules to Firestore
 async function savePublishingSchedules() {
     try {
+        if (typeof firebase === 'undefined') {
+            console.warn('Firebase not loaded, cannot save schedules');
+            showMessage('publishMessage', 'Firebase not initialized. Please refresh the page.', 'error');
+            return;
+        }
+        
         const currentUser = firebase.auth().currentUser;
         if (!currentUser) {
             showMessage('publishMessage', 'You must be logged in to save schedules', 'error');
@@ -1307,6 +1313,11 @@ async function savePublishingSchedules() {
 // Load publishing schedules from Firestore
 async function loadPublishingSchedules() {
     try {
+        if (typeof firebase === 'undefined') {
+            console.warn('Firebase not loaded, skipping schedule load');
+            return;
+        }
+        
         const currentUser = firebase.auth().currentUser;
         if (!currentUser) {
             console.log('No user logged in, skipping schedule load');
