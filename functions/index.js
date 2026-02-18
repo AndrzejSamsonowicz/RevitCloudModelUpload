@@ -1,15 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
-const { defineString } = require('firebase-functions/params');
-
-// Define environment parameters
-const serverUrl = defineString('SERVER_URL', {
-  default: 'http://34.65.169.15:3000'
-});
-const authKey = defineString('CLOUD_FUNCTION_AUTH_KEY', {
-  default: 'h48qZSyxDkdbR1weAzFfjOuVYQtmETs2'
-});
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -143,15 +134,16 @@ function shouldPublishNow(schedule, now) {
  */
 async function triggerPublishing(userId, schedule) {
   try {
-    // Get the VM server URL and auth key from params
-    const serverUrlValue = serverUrl.value();
-    const authKeyValue = authKey.value();
+    // Hardcoded values (params API not working reliably)
+    const serverUrlValue = 'http://34.65.169.15:3000';
+    const authKeyValue = 'h48qZSyxDkdbR1weAzFfjOuVYQtmETs2';
     
     // Prepare the publishing request
     const publishData = {
       userId: userId,
       fileId: schedule.fileId,
       fileName: schedule.fileName,
+      projectId: schedule.projectId, // Project ID in b.xxx format
       projectGuid: schedule.projectGuid,
       modelGuid: schedule.modelGuid,
       region: schedule.region || 'US',

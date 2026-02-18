@@ -1295,6 +1295,7 @@ async function savePublishingSchedules() {
             
             return {
                 ...schedule,
+                projectId: selectedProjectId, // Add projectId (e.g., b.xxx format)
                 projectGuid: row.dataset.projectGuid,
                 modelGuid: row.dataset.modelGuid,
                 region: row.dataset.region || 'US'

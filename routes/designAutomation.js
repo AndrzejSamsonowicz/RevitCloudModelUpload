@@ -222,7 +222,7 @@ router.post('/workitems/batch-status', async (req, res, next) => {
  */
 router.post('/scheduled-publish', async (req, res, next) => {
     try {
-        const { userId, fileId, fileName, projectGuid, modelGuid, region, engineVersion } = req.body;
+        const { userId, fileId, fileName, projectId, projectGuid, modelGuid, region, engineVersion } = req.body;
         
         // Verify the request is from Cloud Functions
         const authHeader = req.headers['x-cloud-function-auth'];
@@ -298,8 +298,8 @@ router.post('/scheduled-publish', async (req, res, next) => {
         console.log(`WorkItem created for scheduled publish: ${result.workItemId}`);
         
         // Trigger PublishModel to make the model viewable
-        // Convert projectGuid to projectId format (b.{guid})
-        const projectId = `b.${projectGuid}`;
+        // Use the projectId from schedule (already in b.xxx format)
+        const projectIdForPublish = projectId || `b.${projectGuid}`;
         
         try {
             console.log(`Triggering PublishModel for ${fileName}...`);
@@ -307,9 +307,7 @@ router.post('/scheduled-publish', async (req, res, next) => {
             // Get the lineage ID from the file version
             const axios = require('axios');
             const versionResponse = await axios.get(
-                `https://developer.api.autodesk.com/data/v1/projects/${projectId}/versions/${encodeURIComponent(fileId)}`,
-                {
-                    headers: { 'Authorization': `Bearer ${userToken}` }
+                `https://developer.api.autodesk.com/data/v1/projects/${projectIdForPublish}/versions/${encodeURIComponent(fileId)}`,
                 }
             );
             
@@ -336,7 +334,7 @@ router.post('/scheduled-publish', async (req, res, next) => {
                 };
                 
                 const publishResponse = await axios.post(
-                    `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands`,
+                    `https://developer.api.autodesk.com/data/v1/projects/${projectIdForPublish}/commands`,
                     publishPayload,
                     {
                         headers: {
