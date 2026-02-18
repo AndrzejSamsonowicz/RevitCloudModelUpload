@@ -153,7 +153,7 @@ async function triggerPublishing(userId, schedule) {
     
     // Make request to the server's scheduled publish endpoint
     const response = await axios.post(
-      `${serverUrl}/api/designautomation/scheduled-publish`,
+      `${serverUrl}/api/design-automation/scheduled-publish`,
       publishData,
       {
         headers: {
