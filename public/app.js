@@ -1274,8 +1274,7 @@ async function savePublishingSchedules() {
             return;
         }
         
-        const currentUser = firebase.auth().currentUser;
-        if (!currentUser) {
+        if (!sessionId) {
             showMessage('publishMessage', 'You must be logged in to save schedules', 'error');
             return;
         }
@@ -1296,7 +1295,7 @@ async function savePublishingSchedules() {
         });
         
         const db = firebase.firestore();
-        await db.collection('users').doc(currentUser.uid).set({
+        await db.collection('users').doc(sessionId).set({
             publishingSchedules: enhancedSchedules,
             schedulesUpdated: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -1318,14 +1317,13 @@ async function loadPublishingSchedules() {
             return;
         }
         
-        const currentUser = firebase.auth().currentUser;
-        if (!currentUser) {
-            console.log('No user logged in, skipping schedule load');
+        if (!sessionId) {
+            console.log('No session found, skipping schedule load');
             return;
         }
         
         const db = firebase.firestore();
-        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        const userDoc = await db.collection('users').doc(sessionId).get();
         
         if (!userDoc.exists) {
             console.log('User document not found');
