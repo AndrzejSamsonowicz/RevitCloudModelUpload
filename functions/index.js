@@ -99,13 +99,26 @@ function shouldPublishNow(schedule, now) {
     const localDate = new Date(now.toLocaleString('en-US', { timeZone: schedule.timezone }));
     const localDay = localDate.getDay();
     
+    console.log(`Schedule check for ${schedule.fileName}: scheduled for ${schedule.time} on days ${schedule.days}, current time is ${localHour}:${String(localMinute).padStart(2, '0')} on day ${localDay}`);
+    
     // Check if current day is in schedule
     if (!schedule.days.includes(localDay)) {
+      console.log(`  Day ${localDay} not in schedule ${schedule.days}`);
       return false;
     }
     
-    // Check if current time matches schedule (exact match or within 15-minute window)
-    const timeMatches = (localHour === scheduleHour && localMinute === scheduleMinute);
+    // Check if current time matches schedule (within 15-minute window for Cloud Function execution)
+    // The function runs every 15 minutes, so if scheduled time is within current 15-min window, trigger it
+    const scheduledMinutes = (scheduleHour * 60) + scheduleMinute;
+    const currentMinutes = (localHour * 60) + localMinute;
+    
+    // Round current time down to nearest 15-min interval
+    const intervalStart = Math.floor(currentMinutes / 15) * 15;
+    
+    // Check if scheduled time falls within this 15-minute interval
+    const timeMatches = scheduledMinutes >= intervalStart && scheduledMinutes < intervalStart + 15;
+    
+    console.log(`  Time check: scheduled=${scheduledMinutes}min, current=${currentMinutes}min, interval=${intervalStart}-${intervalStart+15}, matches=${timeMatches}`);
     
     return timeMatches;
     

@@ -1065,8 +1065,10 @@ function renderFilesList() {
     }
     timeSincePublishInterval = setInterval(updateTimeSinceCells, 60000);
     
-    // Load saved schedules from Firestore
-    loadPublishingSchedules();
+    // Load saved schedules from Firestore (wait for DOM to be ready)
+    setTimeout(() => {
+        loadPublishingSchedules();
+    }, 100);
 }
 
 async function onHubSelected() {
@@ -1335,27 +1337,44 @@ async function loadPublishingSchedules() {
         
         console.log('Loaded schedules from Firestore:', schedules);
         
+        if (schedules.length === 0) {
+            console.log('No schedules found in Firestore');
+            return;
+        }
+        
         // Apply schedules to the UI
+        let appliedCount = 0;
         schedules.forEach(schedule => {
+            console.log(`Applying schedule for fileId: ${schedule.fileId}`);
+            
             const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${schedule.fileId}"]`);
             const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${schedule.fileId}"]`);
             const checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${schedule.fileId}"]`);
+            
+            console.log(`  Found elements: hour=${!!hourInput}, minute=${!!minuteInput}, checkboxes=${checkboxes.length}`);
             
             if (hourInput && minuteInput && schedule.time) {
                 const [hour, minute] = schedule.time.split(':');
                 hourInput.value = hour;
                 minuteInput.value = minute;
+                console.log(`  Set time to ${hour}:${minute}`);
             }
             
             if (checkboxes && schedule.days) {
                 checkboxes.forEach(cb => {
-                    cb.checked = schedule.days.includes(parseInt(cb.dataset.day));
+                    const day = parseInt(cb.dataset.day);
+                    const shouldCheck = schedule.days.includes(day);
+                    cb.checked = shouldCheck;
+                    if (shouldCheck) {
+                        console.log(`  Checked day: ${day}`);
+                    }
                 });
+                appliedCount++;
             }
         });
         
-        if (schedules.length > 0) {
-            showMessage('publishMessage', `✓ Loaded ${schedules.length} publishing schedule(s)`, 'info');
+        if (appliedCount > 0) {
+            showMessage('publishMessage', `✓ Loaded ${appliedCount} publishing schedule(s)`, 'info');
         }
         
     } catch (error) {
