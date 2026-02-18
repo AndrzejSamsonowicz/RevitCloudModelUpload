@@ -217,4 +217,95 @@ router.post('/workitems/batch-status', async (req, res, next) => {
     }
 });
 
+/**
+ * Scheduled publishing endpoint (called by Cloud Functions)
+ */
+router.post('/scheduled-publish', async (req, res, next) => {
+    try {
+        const { userId, fileId, fileName, projectGuid, modelGuid, region, engineVersion } = req.body;
+        
+        // Verify the request is from Cloud Functions
+        const authHeader = req.headers['x-cloud-function-auth'];
+        const expectedAuth = process.env.CLOUD_FUNCTION_AUTH_KEY || 'your-secret-key-here';
+        
+        if (authHeader !== expectedAuth) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        
+        if (!userId || !fileId || !projectGuid || !modelGuid) {
+            return res.status(400).json({ 
+                error: 'Missing required parameters: userId, fileId, projectGuid, modelGuid' 
+            });
+        }
+        
+        console.log(`Scheduled publish triggered for file: ${fileName} (user: ${userId})`);
+        
+        // Get user's token from Firestore
+        const admin = require('firebase-admin');
+        const db = admin.firestore();
+        
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const userData = userDoc.data();
+        let userToken = userData.apsToken;
+        
+        // Check if token needs refresh
+        const tokenExpiry = userData.apsTokenExpiry;
+        const now = Date.now();
+        
+        if (!userToken || !tokenExpiry || now >= tokenExpiry) {
+            // Token expired or missing, try to refresh
+            if (userData.apsRefreshToken) {
+                console.log('Refreshing expired token...');
+                try {
+                    const refreshedData = await apsClient.refreshToken(userData.apsRefreshToken);
+                    userToken = refreshedData.accessToken;
+                    
+                    // Update token in Firestore
+                    await db.collection('users').doc(userId).update({
+                        apsToken: refreshedData.accessToken,
+                        apsTokenExpiry: now + (refreshedData.expiresIn * 1000),
+                        apsRefreshToken: refreshedData.refreshToken
+                    });
+                    
+                    console.log('Token refreshed successfully');
+                } catch (refreshError) {
+                    console.error('Token refresh failed:', refreshError);
+                    return res.status(401).json({ 
+                        error: 'Failed to refresh user token. User needs to re-authenticate.'
+                    });
+                }
+            } else {
+                return res.status(401).json({ 
+                    error: 'User token expired and no refresh token available'
+                });
+            }
+        }
+        
+        const callbackUrl = process.env.WEBHOOK_URL || `http://localhost:${process.env.PORT || 3000}/webhooks/design-automation`;
+        
+        const result = await designAutomation.createWorkItem(
+            { region: region || 'US', projectGuid, modelGuid },
+            userToken,
+            callbackUrl,
+            engineVersion || '2024'
+        );
+        
+        console.log(`WorkItem created for scheduled publish: ${result.workItemId}`);
+        
+        res.json({ 
+            success: true, 
+            data: result,
+            message: `Scheduled publish initiated for ${fileName}`
+        });
+        
+    } catch (error) {
+        console.error('Scheduled publish error:', error);
+        next(error);
+    }
+});
+
 module.exports = router;

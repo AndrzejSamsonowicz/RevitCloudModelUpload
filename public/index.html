@@ -66,8 +66,8 @@
         }
 
         .hub-item {
-            padding: 10px;
-            margin: 5px 0;
+            padding: 16px;
+            margin: 8px 0;
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 4px;
@@ -387,7 +387,7 @@
                 </div>
                 
                 <!-- Projects section -->
-                <div id="projectsPanel" style="display: flex; flex-direction: column; flex: 2; overflow: hidden;">
+                <div id="projectsPanel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
                     <div id="projectsHeader" style="display: none; flex-shrink: 0;">
                         <h3 id="selectedHubTitle" style="font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 15px;"></h3>
                         <input type="text" class="filter-input" id="projectFilter" placeholder="Filter projects..." oninput="filterProjects()">
@@ -417,6 +417,7 @@
 
                     <div style="flex-shrink: 0;">
                         <button onclick="publishModel()">📤 Publish Selected Files to Cloud</button>
+                        <button onclick="savePublishingSchedules()" style="margin-left: 10px; background-color: #28a745;">💾 Save Publishing Schedules</button>
                     </div>
 
                     <div id="workItemLog" class="log hidden"></div>

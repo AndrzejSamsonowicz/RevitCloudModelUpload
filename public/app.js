@@ -555,10 +555,10 @@ function displayHubs(hubsData) {
     bim360Hubs.forEach(hub => {
         const hubName = hub.attributes.name;
         const hubId = hub.id;
-        const region = hub.attributes.region || 'Unknown';
+        const region = hub.attributes.region || 'US';
         
         hubsHTML += `
-            <div class="hub-item" onclick="selectHub('${hubId}', '${hubName.replace(/'/g, "\\'")}')">
+            <div class="hub-item" onclick="selectHub('${hubId}', '${hubName.replace(/'/g, "\\'")}', '${region}')">
                 <div class="hub-name">${hubName}</div>
                 <div class="hub-region">${region}</div>
             </div>
@@ -595,8 +595,9 @@ function filterHubs() {
     displayHubs(filtered);
 }
 
-async function selectHub(hubId, hubName) {
+async function selectHub(hubId, hubName, region) {
     selectedHubId = hubId;
+    window.selectedHubRegion = region || 'US';
     
     // Update UI
     document.querySelectorAll('.hub-item').forEach(item => item.classList.remove('selected'));
@@ -923,6 +924,7 @@ function renderFilesList() {
         tr.dataset.itemId = file.id;
         tr.dataset.fileName = file.name;
         tr.dataset.index = file.index;
+        tr.dataset.region = window.selectedHubRegion || 'US';
         tr.style.borderBottom = '1px solid #eee';
         tr.style.cursor = 'pointer';
         
@@ -985,6 +987,13 @@ function renderFilesList() {
         const tdPublishTime = document.createElement('td');
         tdPublishTime.style.padding = '8px';
         tdPublishTime.style.whiteSpace = 'nowrap';
+        
+        // Generate hour options (00-23)
+        const hourOptions = Array.from({length: 24}, (_, i) => {
+            const h = i.toString().padStart(2, '0');
+            return `<option value="${h}">${h}</option>`;
+        }).join('');
+        
         tdPublishTime.innerHTML = `
             <div style="display: flex; flex-direction: column; gap: 4px;" onclick="event.stopPropagation()">
                 <div style="display: flex; gap: 3px; flex-wrap: wrap;">
@@ -1010,10 +1019,20 @@ function renderFilesList() {
                         <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="0" style="margin: 0; vertical-align: middle;"> S
                     </label>
                 </div>
-                <input type="time" 
-                    class="publish-time-input" 
-                    data-file-id="${file.id}" 
-                    style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 100%;">
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    <select class="publish-hour-input" data-file-id="${file.id}" style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; flex: 1;">
+                        <option value="">Hour</option>
+                        ${hourOptions}
+                    </select>
+                    <span style="font-weight: bold;">:</span>
+                    <select class="publish-minute-input" data-file-id="${file.id}" style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; flex: 1;">
+                        <option value="">Min</option>
+                        <option value="00">00</option>
+                        <option value="15">15</option>
+                        <option value="30">30</option>
+                        <option value="45">45</option>
+                    </select>
+                </div>
                 <div style="font-size: 10px; color: #999;">Local time: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}</div>
             </div>
         `;
@@ -1045,6 +1064,9 @@ function renderFilesList() {
         clearInterval(timeSincePublishInterval);
     }
     timeSincePublishInterval = setInterval(updateTimeSinceCells, 60000);
+    
+    // Load saved schedules from Firestore
+    loadPublishingSchedules();
 }
 
 async function onHubSelected() {
@@ -1197,31 +1219,33 @@ async function checkWorkItemsStatus() {
 // Publishing Schedule Management
 function getPublishingSchedule(fileId) {
     const weekdayCheckboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${fileId}"]`);
-    const timeInput = document.querySelector(`.publish-time-input[data-file-id="${fileId}"]`);
+    const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${fileId}"]`);
+    const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${fileId}"]`);
     
     const selectedDays = Array.from(weekdayCheckboxes)
         .filter(cb => cb.checked)
         .map(cb => parseInt(cb.dataset.day));
     
-    const time = timeInput ? timeInput.value : null;
+    const hour = hourInput ? hourInput.value : null;
+    const minute = minuteInput ? minuteInput.value : null;
     
-    if (selectedDays.length === 0 || !time) {
+    if (selectedDays.length === 0 || !hour || !minute) {
         return null;
     }
     
     return {
         fileId: fileId,
         days: selectedDays, // 0=Sunday, 1=Monday, etc.
-        time: time, // HH:MM format
+        time: `${hour}:${minute}`, // HH:MM format
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     };
 }
 
 function getAllPublishingSchedules() {
     const schedules = [];
-    const timeInputs = document.querySelectorAll('.publish-time-input');
+    const hourInputs = document.querySelectorAll('.publish-hour-input');
     
-    timeInputs.forEach(input => {
+    hourInputs.forEach(input => {
         const fileId = input.dataset.fileId;
         const schedule = getPublishingSchedule(fileId);
         if (schedule) {
@@ -1240,4 +1264,93 @@ function formatScheduleDisplay(schedule) {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const dayString = schedule.days.map(d => dayNames[d]).join(', ');
     return `${dayString} at ${schedule.time} (${schedule.timezone})`;
+}
+// Save all publishing schedules to Firestore
+async function savePublishingSchedules() {
+    try {
+        const currentUser = firebase.auth().currentUser;
+        if (!currentUser) {
+            showMessage('publishMessage', 'You must be logged in to save schedules', 'error');
+            return;
+        }
+        
+        const schedules = getAllPublishingSchedules();
+        
+        // Enhance schedules with additional metadata needed for publishing
+        const enhancedSchedules = schedules.map(schedule => {
+            const row = document.querySelector(`tr[data-file-id="${schedule.fileId}"]`);
+            if (!row) return schedule;
+            
+            return {
+                ...schedule,
+                projectGuid: row.dataset.projectGuid,
+                modelGuid: row.dataset.modelGuid,
+                region: row.dataset.region || 'US'
+            };
+        });
+        
+        const db = firebase.firestore();
+        await db.collection('users').doc(currentUser.uid).set({
+            publishingSchedules: enhancedSchedules,
+            schedulesUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        showMessage('publishMessage', `✓ Saved ${schedules.length} publishing schedule(s)`, 'success');
+        console.log('Schedules saved:', enhancedSchedules);
+        
+    } catch (error) {
+        console.error('Error saving schedules:', error);
+        showMessage('publishMessage', `Failed to save schedules: ${error.message}`, 'error');
+    }
+}
+
+// Load publishing schedules from Firestore
+async function loadPublishingSchedules() {
+    try {
+        const currentUser = firebase.auth().currentUser;
+        if (!currentUser) {
+            console.log('No user logged in, skipping schedule load');
+            return;
+        }
+        
+        const db = firebase.firestore();
+        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        
+        if (!userDoc.exists) {
+            console.log('User document not found');
+            return;
+        }
+        
+        const userData = userDoc.data();
+        const schedules = userData.publishingSchedules || [];
+        
+        console.log('Loaded schedules from Firestore:', schedules);
+        
+        // Apply schedules to the UI
+        schedules.forEach(schedule => {
+            const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${schedule.fileId}"]`);
+            const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${schedule.fileId}"]`);
+            const checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${schedule.fileId}"]`);
+            
+            if (hourInput && minuteInput && schedule.time) {
+                const [hour, minute] = schedule.time.split(':');
+                hourInput.value = hour;
+                minuteInput.value = minute;
+            }
+            
+            if (checkboxes && schedule.days) {
+                checkboxes.forEach(cb => {
+                    cb.checked = schedule.days.includes(parseInt(cb.dataset.day));
+                });
+            }
+        });
+        
+        if (schedules.length > 0) {
+            showMessage('publishMessage', `✓ Loaded ${schedules.length} publishing schedule(s)`, 'info');
+        }
+        
+    } catch (error) {
+        console.error('Error loading schedules:', error);
+        showMessage('publishMessage', `Failed to load schedules: ${error.message}`, 'error');
+    }
 }

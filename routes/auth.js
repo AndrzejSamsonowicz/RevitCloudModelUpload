@@ -39,6 +39,31 @@ router.get('/callback', async (req, res) => {
             ...tokenData,
             timestamp: Date.now()
         });
+        
+        // Also store token in Firestore for scheduled publishing
+        // Get user info from APS to identify the user
+        const admin = require('firebase-admin');
+        const db = admin.firestore();
+        
+        try {
+            // Use sessionId as userId for now (in production, get actual user email from APS)
+            const userId = sessionId;
+            const now = Date.now();
+            
+            await db.collection('users').doc(userId).set({
+                apsToken: tokenData.accessToken,
+                apsRefreshToken: tokenData.refreshToken,
+                apsTokenExpiry: now + (tokenData.expiresIn * 1000),
+                sessionId: sessionId,
+                lastLogin: now,
+                publishingSchedules: [] // Initialize empty schedules array
+            }, { merge: true });
+            
+            console.log(`Stored tokens in Firestore for user: ${userId}`);
+        } catch (firestoreError) {
+            console.error('Failed to store tokens in Firestore:', firestoreError);
+            // Continue even if Firestore storage fails
+        }
 
         // Redirect to frontend with session ID
         res.redirect(`/?session=${sessionId}&success=true`);

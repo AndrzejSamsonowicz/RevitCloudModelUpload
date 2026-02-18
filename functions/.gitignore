@@ -1,0 +1,23 @@
+# Compiled JavaScript files
+*.js.map
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Node modules
+node_modules/
+
+# Firebase cache
+.firebase/
+
+# Firebase config (contains sensitive data if local)
+.runtimeconfig.json
+.env.yaml
+
+# Logs
+npm-debug.log*
+firebase-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
