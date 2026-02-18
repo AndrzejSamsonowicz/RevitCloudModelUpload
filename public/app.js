@@ -985,11 +985,38 @@ function renderFilesList() {
         const tdPublishTime = document.createElement('td');
         tdPublishTime.style.padding = '8px';
         tdPublishTime.style.whiteSpace = 'nowrap';
-        tdPublishTime.innerHTML = `<input type="time" 
-            class="publish-time-input" 
-            data-file-id="${file.id}" 
-            onclick="event.stopPropagation()" 
-            style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">`;
+        tdPublishTime.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 4px;" onclick="event.stopPropagation()">
+                <div style="display: flex; gap: 3px; flex-wrap: wrap;">
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Monday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="1" style="margin: 0; vertical-align: middle;"> M
+                    </label>
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Tuesday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="2" style="margin: 0; vertical-align: middle;"> T
+                    </label>
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Wednesday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="3" style="margin: 0; vertical-align: middle;"> W
+                    </label>
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Thursday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="4" style="margin: 0; vertical-align: middle;"> T
+                    </label>
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Friday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="5" style="margin: 0; vertical-align: middle;"> F
+                    </label>
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Saturday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="6" style="margin: 0; vertical-align: middle;"> S
+                    </label>
+                    <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Sunday">
+                        <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="0" style="margin: 0; vertical-align: middle;"> S
+                    </label>
+                </div>
+                <input type="time" 
+                    class="publish-time-input" 
+                    data-file-id="${file.id}" 
+                    style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 100%;">
+                <div style="font-size: 10px; color: #999;">Local time: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}</div>
+            </div>
+        `;
         
         tr.appendChild(tdCheckbox);
         tr.appendChild(tdName);
@@ -1165,4 +1192,52 @@ async function checkWorkItemsStatus() {
         addLog(`❌ Request failed: ${error.message}`, 'error');
         showMessage('publishMessage', `Failed to check WorkItems status: ${error.message}`, 'error');
     }
+}
+
+// Publishing Schedule Management
+function getPublishingSchedule(fileId) {
+    const weekdayCheckboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${fileId}"]`);
+    const timeInput = document.querySelector(`.publish-time-input[data-file-id="${fileId}"]`);
+    
+    const selectedDays = Array.from(weekdayCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => parseInt(cb.dataset.day));
+    
+    const time = timeInput ? timeInput.value : null;
+    
+    if (selectedDays.length === 0 || !time) {
+        return null;
+    }
+    
+    return {
+        fileId: fileId,
+        days: selectedDays, // 0=Sunday, 1=Monday, etc.
+        time: time, // HH:MM format
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    };
+}
+
+function getAllPublishingSchedules() {
+    const schedules = [];
+    const timeInputs = document.querySelectorAll('.publish-time-input');
+    
+    timeInputs.forEach(input => {
+        const fileId = input.dataset.fileId;
+        const schedule = getPublishingSchedule(fileId);
+        if (schedule) {
+            // Find the file name from the row
+            const row = input.closest('tr');
+            const fileName = row ? row.dataset.fileName : 'Unknown';
+            schedule.fileName = fileName;
+            schedules.push(schedule);
+        }
+    });
+    
+    return schedules;
+}
+
+function formatScheduleDisplay(schedule) {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayString = schedule.days.map(d => dayNames[d]).join(', ');
+    return `${dayString} at ${schedule.time} (${schedule.timezone})`;
 }
