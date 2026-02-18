@@ -308,6 +308,10 @@ router.post('/scheduled-publish', async (req, res, next) => {
             const axios = require('axios');
             const versionResponse = await axios.get(
                 `https://developer.api.autodesk.com/data/v1/projects/${projectIdForPublish}/versions/${encodeURIComponent(fileId)}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${userToken}`
+                    }
                 }
             );
             
