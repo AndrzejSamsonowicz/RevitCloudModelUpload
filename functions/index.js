@@ -85,8 +85,7 @@ function shouldPublishNow(schedule, now) {
       timeZone: schedule.timezone,
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
-      weekday: 'numeric'
+      hour12: false
     };
     
     const formatter = new Intl.DateTimeFormat('en-US', options);
