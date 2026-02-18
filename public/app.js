@@ -890,14 +890,24 @@ function renderFilesList() {
     thTimeSince.style.padding = '8px';
     thTimeSince.style.textAlign = 'left';
     thTimeSince.style.borderBottom = '2px solid #ddd';
+    thTimeSince.style.borderRight = '1px solid #ddd';
     thTimeSince.style.whiteSpace = 'nowrap';
     thTimeSince.innerHTML = `Time Since Publish`;
+    
+    // Publishing Time column
+    const thPublishTime = document.createElement('th');
+    thPublishTime.style.padding = '8px';
+    thPublishTime.style.textAlign = 'left';
+    thPublishTime.style.borderBottom = '2px solid #ddd';
+    thPublishTime.style.whiteSpace = 'nowrap';
+    thPublishTime.innerHTML = `Publishing Time`;
     
     headerRow.appendChild(thCheckbox);
     headerRow.appendChild(thName);
     headerRow.appendChild(thPath);
     headerRow.appendChild(thDate);
     headerRow.appendChild(thTimeSince);
+    headerRow.appendChild(thPublishTime);
     thead.appendChild(headerRow);
     table.appendChild(thead);
     
@@ -966,16 +976,27 @@ function renderFilesList() {
         tdTimeSince.className = 'time-since-cell';
         tdTimeSince.dataset.publishDate = publishDateForCalc || '';
         tdTimeSince.style.padding = '8px';
+        tdTimeSince.style.borderRight = '1px solid #ddd';
         tdTimeSince.style.whiteSpace = 'nowrap';
         tdTimeSince.style.fontSize = '12px';
         tdTimeSince.style.color = '#666';
         tdTimeSince.textContent = timeSincePublish;
+        
+        const tdPublishTime = document.createElement('td');
+        tdPublishTime.style.padding = '8px';
+        tdPublishTime.style.whiteSpace = 'nowrap';
+        tdPublishTime.innerHTML = `<input type="time" 
+            class="publish-time-input" 
+            data-file-id="${file.id}" 
+            onclick="event.stopPropagation()" 
+            style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">`;
         
         tr.appendChild(tdCheckbox);
         tr.appendChild(tdName);
         tr.appendChild(tdPath);
         tr.appendChild(tdDate);
         tr.appendChild(tdTimeSince);
+        tr.appendChild(tdPublishTime);
         
         // Click on row toggles checkbox
         tr.addEventListener('click', (e) => {
