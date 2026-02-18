@@ -297,6 +297,62 @@ router.post('/scheduled-publish', async (req, res, next) => {
         
         console.log(`WorkItem created for scheduled publish: ${result.workItemId}`);
         
+        // Trigger PublishModel to make the model viewable
+        // Convert projectGuid to projectId format (b.{guid})
+        const projectId = `b.${projectGuid}`;
+        
+        try {
+            console.log(`Triggering PublishModel for ${fileName}...`);
+            
+            // Get the lineage ID from the file version
+            const axios = require('axios');
+            const versionResponse = await axios.get(
+                `https://developer.api.autodesk.com/data/v1/projects/${projectId}/versions/${encodeURIComponent(fileId)}`,
+                {
+                    headers: { 'Authorization': `Bearer ${userToken}` }
+                }
+            );
+            
+            const lineageId = versionResponse.data.data.relationships?.item?.data?.id;
+            
+            if (lineageId) {
+                // Create PublishModel command
+                const publishPayload = {
+                    jsonapi: { version: '1.0' },
+                    data: {
+                        type: 'commands',
+                        attributes: {
+                            extension: {
+                                type: 'commands:autodesk.bim360:C4RModelPublish',
+                                version: '1.0.0'
+                            }
+                        },
+                        relationships: {
+                            resources: {
+                                data: [{ type: 'items', id: lineageId }]
+                            }
+                        }
+                    }
+                };
+                
+                const publishResponse = await axios.post(
+                    `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands`,
+                    publishPayload,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${userToken}`,
+                            'Content-Type': 'application/vnd.api+json'
+                        }
+                    }
+                );
+                
+                console.log(`✓ PublishModel triggered: ${publishResponse.data.data.id}`);
+            }
+        } catch (publishError) {
+            console.error('PublishModel failed (non-fatal):', publishError.response?.data || publishError.message);
+            // Don't fail the whole request if PublishModel fails
+        }
+        
         res.json({ 
             success: true, 
             data: result,
