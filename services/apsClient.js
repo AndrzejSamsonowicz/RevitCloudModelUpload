@@ -120,6 +120,32 @@ class APSClient {
             throw new Error('Token refresh failed');
         }
     }
+
+    /**
+     * Get user profile information using 3-legged token
+     */
+    async getUserProfile(accessToken) {
+        try {
+            const response = await axios.get(
+                `${APS_BASE_URL}/userprofile/v1/users/@me`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                }
+            );
+
+            return {
+                userId: response.data.userId,
+                email: response.data.email || response.data.emailId,
+                firstName: response.data.firstName,
+                lastName: response.data.lastName
+            };
+        } catch (error) {
+            console.error('Failed to get user profile:', error.response?.data || error.message);
+            throw new Error('Failed to retrieve user profile');
+        }
+    }
 }
 
 module.exports = new APSClient();

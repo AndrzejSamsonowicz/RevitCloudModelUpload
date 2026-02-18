@@ -1,4 +1,5 @@
 let sessionId = null;
+let userId = null; // Consistent APS user ID for Firestore
 
 // Global interval ID for time updates
 let timeSincePublishInterval = null;
@@ -116,6 +117,7 @@ async function logout() {
     try {
         await fetch(`/oauth/logout/${sessionId}`, { method: 'POST' });
         sessionId = null;
+        userId = null;
         updateAuthUI(false);
         showMessage('authMessage', 'Logged out successfully', 'info');
     } catch (error) {
@@ -130,6 +132,8 @@ async function checkSession() {
         const response = await fetch(`/oauth/session/${sessionId}`);
         if (response.ok) {
             const data = await response.json();
+            userId = data.userId; // Store consistent user ID
+            console.log('User authenticated:', data.userEmail || userId);
             updateAuthUI(data.authenticated);
             if (data.authenticated) {
                 // Auto-load hubs after authentication
@@ -137,6 +141,7 @@ async function checkSession() {
             }
         } else {
             sessionId = null;
+            userId = null;
             updateAuthUI(false);
         }
     } catch (error) {
@@ -1276,7 +1281,7 @@ async function savePublishingSchedules() {
             return;
         }
         
-        if (!sessionId) {
+        if (!userId) {
             showMessage('publishMessage', 'You must be logged in to save schedules', 'error');
             return;
         }
@@ -1297,11 +1302,12 @@ async function savePublishingSchedules() {
         });
         
         const db = firebase.firestore();
-        await db.collection('users').doc(sessionId).set({
+        await db.collection('users').doc(userId).set({
             publishingSchedules: enhancedSchedules,
             schedulesUpdated: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         
+        console.log(`Saved ${schedules.length} schedules for user: ${userId}`);
         showMessage('publishMessage', `✓ Saved ${schedules.length} publishing schedule(s)`, 'success');
         console.log('Schedules saved:', enhancedSchedules);
         
@@ -1319,23 +1325,23 @@ async function loadPublishingSchedules() {
             return;
         }
         
-        if (!sessionId) {
-            console.log('No session found, skipping schedule load');
+        if (!userId) {
+            console.log('No userId found, skipping schedule load');
             return;
         }
         
         const db = firebase.firestore();
-        const userDoc = await db.collection('users').doc(sessionId).get();
+        const userDoc = await db.collection('users').doc(userId).get();
         
         if (!userDoc.exists) {
-            console.log('User document not found');
+            console.log(`User document not found for userId: ${userId}`);
             return;
         }
         
         const userData = userDoc.data();
         const schedules = userData.publishingSchedules || [];
         
-        console.log('Loaded schedules from Firestore:', schedules);
+        console.log(`Loaded schedules from Firestore for user ${userId}:`, schedules);
         
         if (schedules.length === 0) {
             console.log('No schedules found in Firestore');

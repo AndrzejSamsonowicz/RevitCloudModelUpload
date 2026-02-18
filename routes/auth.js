@@ -33,21 +33,33 @@ router.get('/callback', async (req, res) => {
     try {
         const tokenData = await apsClient.get3LeggedToken(code);
         
+        // Get user profile to get consistent userId
+        let userProfile;
+        try {
+            userProfile = await apsClient.getUserProfile(tokenData.accessToken);
+            console.log('User profile retrieved:', userProfile.email || userProfile.userId);
+        } catch (profileError) {
+            console.error('Failed to get user profile:', profileError);
+            // Fallback to sessionId if profile fetch fails
+            userProfile = { userId: Math.random().toString(36).substring(7) };
+        }
+        
         // Store token in session (in production, use secure session storage)
         const sessionId = Math.random().toString(36).substring(7);
         sessions.set(sessionId, {
             ...tokenData,
+            userId: userProfile.userId,
+            userEmail: userProfile.email,
             timestamp: Date.now()
         });
         
         // Also store token in Firestore for scheduled publishing
-        // Get user info from APS to identify the user
+        // Use consistent APS userId instead of temporary sessionId
         const admin = require('firebase-admin');
         const db = admin.firestore();
         
         try {
-            // Use sessionId as userId for now (in production, get actual user email from APS)
-            const userId = sessionId;
+            const userId = userProfile.userId;
             const now = Date.now();
             
             await db.collection('users').doc(userId).set({
@@ -55,11 +67,13 @@ router.get('/callback', async (req, res) => {
                 apsRefreshToken: tokenData.refreshToken,
                 apsTokenExpiry: now + (tokenData.expiresIn * 1000),
                 sessionId: sessionId,
-                lastLogin: now,
-                publishingSchedules: [] // Initialize empty schedules array
+                email: userProfile.email,
+                firstName: userProfile.firstName,
+                lastName: userProfile.lastName,
+                lastLogin: now
             }, { merge: true });
             
-            console.log(`Stored tokens in Firestore for user: ${userId}`);
+            console.log(`Stored tokens in Firestore for user: ${userId} (${userProfile.email})`);
         } catch (firestoreError) {
             console.error('Failed to store tokens in Firestore:', firestoreError);
             // Continue even if Firestore storage fails
@@ -86,7 +100,9 @@ router.get('/session/:sessionId', (req, res) => {
     res.json({
         authenticated: true,
         expiresIn: session.expiresIn,
-        timestamp: session.timestamp
+        timestamp: session.timestamp,
+        userId: session.userId,
+        userEmail: session.userEmail
     });
 });
 
