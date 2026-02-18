@@ -287,11 +287,12 @@ router.post('/scheduled-publish', async (req, res, next) => {
         
         const callbackUrl = process.env.WEBHOOK_URL || `http://localhost:${process.env.PORT || 3000}/webhooks/design-automation`;
         
+        // Always use Revit 2026 (newest version, backward compatible with older files)
         const result = await designAutomation.createWorkItem(
             { region: region || 'US', projectGuid, modelGuid },
             userToken,
             callbackUrl,
-            engineVersion || '2024'
+            '2026' // Safe default: 2026 can open all earlier Revit files
         );
         
         console.log(`WorkItem created for scheduled publish: ${result.workItemId}`);
