@@ -83,6 +83,41 @@ function openApsGuide() {
     window.open('https://aps.autodesk.com/en/docs/oauth/v2/tutorials/create-app/', '_blank');
 }
 
+// Loading Modal Functions
+function showLoadingModal(text) {
+    const modal = document.getElementById('loadingModal');
+    const modalText = document.getElementById('loadingModalText');
+    const modalContent = document.querySelector('.loading-modal-content');
+    const progressBar = document.querySelector('.progress-bar-container');
+    modalText.textContent = text || 'Loading...';
+    modalContent.style.backgroundColor = '#fefefe';
+    modalText.style.color = '#333';
+    progressBar.style.display = 'block';
+    modal.style.display = 'flex';
+}
+
+function showLoadingModalError(text) {
+    const modal = document.getElementById('loadingModal');
+    const modalText = document.getElementById('loadingModalText');
+    const modalContent = document.querySelector('.loading-modal-content');
+    const progressBar = document.querySelector('.progress-bar-container');
+    modalText.textContent = text || 'Error';
+    modalContent.style.backgroundColor = '#ffebee';
+    modalText.style.color = '#c62828';
+    progressBar.style.display = 'none';
+    modal.style.display = 'flex';
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+        hideLoadingModal();
+    }, 3000);
+}
+
+function hideLoadingModal() {
+    const modal = document.getElementById('loadingModal');
+    modal.style.display = 'none';
+}
+
 // Check for session on page load
 window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
@@ -95,10 +130,6 @@ window.addEventListener('DOMContentLoaded', () => {
         });
         // Clean URL
         window.history.replaceState({}, document.title, '/');
-    }
-
-    if (params.get('success') === 'true') {
-        showMessage('authMessage', 'Successfully authenticated!', 'success');
     }
 
     if (params.get('error')) {
@@ -154,23 +185,28 @@ function updateAuthUI(authenticated) {
     const loginBtn = document.getElementById('loginBtn');
     const logoutBtn = document.getElementById('logoutBtn');
     const settingsBtn = document.getElementById('settingsBtn');
-    const loginDiv = document.getElementById('login');
+    const settingsBtn2 = document.getElementById('settingsBtn2');
+    const loginScreen = document.getElementById('loginScreen');
     const contentDiv = document.getElementById('content');
     const errorDiv = document.getElementById('error');
 
     if (authenticated) {
-        loginBtn.classList.add('hidden');
-        settingsBtn.classList.add('hidden');
-        logoutBtn.classList.remove('hidden');
-        loginDiv.style.display = 'flex';
-        contentDiv.style.display = 'block';
-        errorDiv.style.display = 'none';
+        // Hide login screen, show main content
+        if (loginScreen) loginScreen.style.display = 'none';
+        if (contentDiv) contentDiv.style.display = 'block';
+        if(loginBtn) loginBtn.classList.add('hidden');
+        if (settingsBtn) settingsBtn.classList.add('hidden');
+        if (logoutBtn) logoutBtn.classList.remove('hidden');
+        if (settingsBtn2) settingsBtn2.classList.remove('hidden');
+        if (errorDiv) errorDiv.style.display = 'none';
     } else {
-        loginBtn.classList.remove('hidden');
-        settingsBtn.classList.remove('hidden');
-        logoutBtn.classList.add('hidden');
-        loginDiv.style.display = 'flex';
-        contentDiv.style.display = 'none';
+        // Show login screen, hide main content
+        if (loginScreen) loginScreen.style.display = 'block';
+        if (contentDiv) contentDiv.style.display = 'none';
+        if (loginBtn) loginBtn.classList.remove('hidden');
+        if (settingsBtn) settingsBtn.classList.remove('hidden');
+        if (logoutBtn) logoutBtn.classList.add('hidden');
+        if (settingsBtn2) settingsBtn2.classList.add('hidden');
     }
 }
 
@@ -526,9 +562,7 @@ async function loadHubs() {
         if (response.ok) {
             originalHubsData = data;
             displayHubs(data);
-            // Show content panel
-            document.getElementById('content').style.display = 'block';
-            document.getElementById('login').style.display = 'flex';
+            // Content panel is already shown by updateAuthUI
         } else {
             showMessage('publishMessage', `Error loading hubs: ${data.error}`, 'error');
         }
@@ -698,8 +732,8 @@ async function selectProject(projectId, projectName) {
     // Show files section
     document.getElementById('filesSection').style.display = 'flex';
     
-    // Load Revit files
-    showMessage('publishMessage', `Loading Revit files from ${projectName}...`, 'info');
+    // Load Revit files - show loading modal
+    showLoadingModal(`Loading Revit files from ${projectName}...`);
     
     try {
         // Get top folders first
@@ -719,11 +753,11 @@ async function selectProject(projectId, projectName) {
             if (projectFilesFolder) {
                 await loadRevitFiles(projectId, projectFilesFolder.id);
             } else {
-                showMessage('publishMessage', 'Project Files folder not found', 'error');
+                showLoadingModalError('Project Files folder not found');
             }
         }
     } catch (error) {
-        showMessage('publishMessage', `Failed to load folders: ${error.message}`, 'error');
+        showLoadingModalError(`Failed to load folders: ${error.message}`);
     }
 }
 
@@ -743,6 +777,7 @@ async function loadRevitFiles(projectId, folderId) {
             if (!data.files || data.files.length === 0) {
                 filesList.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No Revit cloud models found</div>';
                 allRevitFiles = [];
+                hideLoadingModal();
                 return;
             }
             
@@ -754,12 +789,12 @@ async function loadRevitFiles(projectId, folderId) {
             
             renderFilesList();
             updateFileSelection();
-            showMessage('publishMessage', `Found ${data.total} Revit cloud model(s).`, 'success');
+            hideLoadingModal();
         } else {
-            showMessage('publishMessage', `Error loading Revit files: ${data.error}`, 'error');
+            showLoadingModalError(`Error loading Revit files: ${data.error}`);
         }
     } catch (error) {
-        showMessage('publishMessage', `Failed to load Revit files: ${error.message}`, 'error');
+        showLoadingModalError(`Failed to load Revit files: ${error.message}`);
     }
 }
 
@@ -1403,12 +1438,7 @@ async function loadPublishingSchedules() {
             });
         });
         
-        if (appliedCount > 0) {
-            showMessage('publishMessage', `✓ Loaded ${appliedCount} publishing schedule(s)`, 'info');
-        }
-        
     } catch (error) {
         console.error('Error loading schedules:', error);
-        showMessage('publishMessage', `Failed to load schedules: ${error.message}`, 'error');
     }
 }
