@@ -1352,11 +1352,33 @@ async function loadPublishingSchedules() {
         // Apply schedules to the UI
         let appliedCount = 0;
         schedules.forEach(schedule => {
-            console.log(`Applying schedule for fileId: ${schedule.fileId}`);
+            console.log(`Applying schedule for file: ${schedule.fileName} (fileId: ${schedule.fileId})`);
             
-            const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${schedule.fileId}"]`);
-            const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${schedule.fileId}"]`);
-            const checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${schedule.fileId}"]`);
+            // Try to find elements by exact fileId first
+            let hourInput = document.querySelector(`.publish-hour-input[data-file-id="${schedule.fileId}"]`);
+            let minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${schedule.fileId}"]`);
+            let checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${schedule.fileId}"]`);
+            
+            // If not found by exact match, try to find by fileName (match any version)
+            if (!hourInput && schedule.fileName) {
+                console.log(`  Exact fileId not found, searching by fileName: ${schedule.fileName}`);
+                
+                // Find the file row by matching the file name
+                const allRows = document.querySelectorAll('#rvtFilesList tbody tr');
+                for (const row of allRows) {
+                    const nameCell = row.querySelector('td:nth-child(2)');
+                    if (nameCell && nameCell.textContent.startsWith(schedule.fileName + ' ')) {
+                        // Found matching file by name, get its fileId
+                        const matchedFileId = row.dataset.fileId;
+                        console.log(`  Found matching file with fileId: ${matchedFileId}`);
+                        
+                        hourInput = document.querySelector(`.publish-hour-input[data-file-id="${matchedFileId}"]`);
+                        minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${matchedFileId}"]`);
+                        checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${matchedFileId}"]`);
+                        break;
+                    }
+                }
+            }
             
             console.log(`  Found elements: hour=${!!hourInput}, minute=${!!minuteInput}, checkboxes=${checkboxes.length}`);
             
