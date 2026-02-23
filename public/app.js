@@ -483,6 +483,13 @@ async function publishModel() {
         addLog(`\n✓ ${summaryMsg}`, failCount === 0 ? 'success' : 'info');
         addLog('\nNote: Files are being published to the cloud. Refresh BIM 360/ACC to see new versions.', 'info');
         
+        // Show toast notification
+        showToast(
+            failCount === 0 ? 'Publishing Complete!' : 'Publishing Finished',
+            `${successCount} file(s) published successfully${failCount > 0 ? `, ${failCount} failed` : ''}`,
+            failCount === 0 ? 'success' : 'info'
+        );
+        
     } catch (error) {
         showMessage('publishMessage', `Request failed: ${error.message}`, 'error');
         addLog(`Request failed: ${error.message}`, 'error');
@@ -599,6 +606,35 @@ function showMessage(elementId, message, type) {
             element.innerHTML = '';
         }
     }, 5000);
+}
+
+function showToast(title, message, type = 'info') {
+    const icons = {
+        success: '✓',
+        error: '✗',
+        info: 'ℹ'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+    toast.innerHTML = `
+        <div class="toast-icon">${icons[type] || icons.info}</div>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }, 4000);
 }
 
 function addLog(message, type = '', logId = 'workItemLog') {
