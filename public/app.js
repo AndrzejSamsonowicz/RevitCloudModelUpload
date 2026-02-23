@@ -138,6 +138,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 sessionStorage.removeItem('aps_session');
                 window.location.href = '/login';
             } else {
+                // Show the page after successful authentication
+                document.body.style.visibility = 'visible';
                 // Auto-upload AppBundle after successful authentication
                 autoUploadAppBundle();
             }
