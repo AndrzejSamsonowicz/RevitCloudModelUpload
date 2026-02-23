@@ -1591,9 +1591,10 @@ async function refreshPublishingHistory() {
         
         // Get scheduled publishes from Firestore
         let firestoreHistory = [];
-        if (typeof firebase !== 'undefined' && firebase.auth() && firebase.auth().currentUser) {
+        
+        // Use the global userId from APS OAuth session (not Firebase auth)
+        if (typeof firebase !== 'undefined' && userId && typeof firebase.firestore === 'function') {
             try {
-                const userId = firebase.auth().currentUser.uid;
                 console.log('Fetching Firestore history for user:', userId);
                 
                 const db = firebase.firestore();
@@ -1626,7 +1627,11 @@ async function refreshPublishingHistory() {
                 console.error('Error fetching Firestore history:', error);
             }
         } else {
-            console.log('Firebase not authenticated, skipping Firestore history');
+            if (!userId) {
+                console.log('No userId available, skipping Firestore history');
+            } else if (typeof firebase === 'undefined') {
+                console.log('Firebase not loaded, skipping Firestore history');
+            }
         }
         
         // Combine and sort by timestamp (most recent first)
