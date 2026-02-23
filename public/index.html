@@ -551,18 +551,18 @@
 
     <!-- Publishing History Modal -->
     <div id="publishingHistoryModal" class="credentials-modal" style="display: none;">
-        <div class="credentials-modal-content" style="max-width: 1200px;">
+        <div class="credentials-modal-content" style="max-width: 1200px; display: flex; flex-direction: column; max-height: 90vh;">
             <div class="credentials-modal-header">
                 <h3>Publishing History</h3>
                 <span class="credentials-modal-close" onclick="closePublishingHistory()">&times;</span>
             </div>
-            <div class="credentials-modal-body">
-                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+            <div class="credentials-modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-shrink: 0;">
                     <button onclick="refreshPublishingHistory()" style="min-width: 150px;">Refresh History</button>
                     <button onclick="clearPublishingHistory()" style="min-width: 150px; background-color: #dc3545 !important;">Clear History</button>
                     <span id="historyCount" style="color: #666; margin-left: auto;">0 records</span>
                 </div>
-                <div id="publishingHistoryContent" style="max-height: 700px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 15px; background: #f8f9fa;">
+                <div id="publishingHistoryContent" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 15px; background: #f8f9fa;">
                     <div style="text-align: center; color: #999; padding: 20px;">Loading history...</div>
                 </div>
             </div>
