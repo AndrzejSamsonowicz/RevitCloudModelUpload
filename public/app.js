@@ -1639,9 +1639,12 @@ async function refreshPublishingHistory() {
             return new Date(b.timestamp) - new Date(a.timestamp);
         });
         
+        console.log('Local history count:', localHistory.length);
+        console.log('Firestore history count:', firestoreHistory.length);
         console.log('Combined history length:', allHistory.length);
+        console.log('Combined history:', allHistory);
         
-        countSpan.textContent = `${allHistory.length} record${allHistory.length !== 1 ? 's' : ''}`;
+        countSpan.textContent = `${allHistory.length} record${allHistory.length !== 1 ? 's' : ''} (${localHistory.length} manual, ${firestoreHistory.length} scheduled)`;
         
         if (allHistory.length === 0) {
             contentDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No publishing history found</div>';
@@ -1669,6 +1672,7 @@ async function refreshPublishingHistory() {
             
             // Determine source badge
             const isScheduled = entry.details?.source === 'scheduled';
+            console.log(`Entry ${index}: ${entry.fileName}, isScheduled=${isScheduled}, source=${entry.details?.source}`);
             const sourceBadge = isScheduled 
                 ? '<span style="background: #0696D7; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">SCHEDULED</span>'
                 : '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">MANUAL</span>';
