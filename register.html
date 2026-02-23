@@ -378,8 +378,12 @@
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 const user = userCredential.user;
                 
-                // Step 3: Send email verification
-                await user.sendEmailVerification();
+                // Step 3: Send email verification with custom action URL
+                const actionCodeSettings = {
+                    url: `${window.location.origin}/login`,
+                    handleCodeInApp: false
+                };
+                await user.sendEmailVerification(actionCodeSettings);
                 
                 // Step 4: Create user document in Firestore
                 await db.collection('users').doc(user.uid).set({

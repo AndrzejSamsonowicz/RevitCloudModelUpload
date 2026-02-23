@@ -240,6 +240,15 @@
         <!-- Alert Messages -->
         <div id="alertMessage" class="alert"></div>
         
+        <!-- Email Not Verified Section -->
+        <div id="emailNotVerified" class="alert alert-error" style="display: none;">
+            <p style="margin-bottom: 10px;">⚠️ Your email is not verified yet.</p>
+            <p style="font-size: 13px; margin-bottom: 10px;">Please check your inbox for the verification email.</p>
+            <button class="btn btn-primary" onclick="resendVerificationEmail()" style="padding: 8px 16px; font-size: 14px; margin-top: 5px;">
+                Resend Verification Email
+            </button>
+        </div>
+        
         <!-- Login Form -->
         <form id="loginForm">
             <div class="form-group">
@@ -378,9 +387,15 @@
             }
         });
         
+        // Store email for resend verification
+        let pendingVerificationEmail = null;
+        
         // Login Form Handler
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Hide email not verified section
+            document.getElementById('emailNotVerified').style.display = 'none';
             
             // Check rate limiting
             if (lockoutUntil && Date.now() < lockoutUntil) {
@@ -402,7 +417,9 @@
                 
                 // Check email verification
                 if (!user.emailVerified) {
-                    showAlert('Please verify your email before logging in. Check your inbox.', 'error');
+                    pendingVerificationEmail = user;
+                    document.getElementById('emailNotVerified').style.display = 'block';
+                    document.getElementById('alertMessage').style.display = 'none';
                     await auth.signOut();
                     loginBtn.disabled = false;
                     loginBtn.innerHTML = 'Log In';
@@ -510,12 +527,67 @@
             }
         });
         
+        // Resend Verification Email
+        async function resendVerificationEmail() {
+            if (!pendingVerificationEmail) {
+                showAlert('Please try logging in again first.', 'error');
+                return;
+            }
+            
+            try {
+                // Re-authenticate to get fresh user object
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+                
+                if (!email || !password) {
+                    showAlert('Please enter your email and password first.', 'error');
+                    return;
+                }
+                
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Send verification email with custom action URL
+                const actionCodeSettings = {
+                    url: `${window.location.origin}/login`,
+                    handleCodeInApp: false
+                };
+                await user.sendEmailVerification(actionCodeSettings);
+                
+                // Sign out immediately
+                await auth.signOut();
+                
+                // Show success message
+                document.getElementById('emailNotVerified').style.display = 'none';
+                showAlert('Verification email sent! Please check your inbox and click the verification link.', 'success');
+                
+            } catch (error) {
+                console.error('Resend verification error:', error);
+                
+                let errorMessage = 'Failed to resend verification email.';
+                switch (error.code) {
+                    case 'auth/too-many-requests':
+                        errorMessage = 'Too many requests. Please try again in a few minutes.';
+                        break;
+                    case 'auth/user-not-found':
+                        errorMessage = 'Account not found. Please sign up first.';
+                        break;
+                    case 'auth/wrong-password':
+                        errorMessage = 'Incorrect password. Please enter the correct password.';
+                        break;
+                }
+                
+                showAlert(errorMessage, 'error');
+            }
+        }
+        
         // Helper Functions
         function showAlert(message, type) {
             const alert = document.getElementById('alertMessage');
             alert.textContent = message;
             alert.className = `alert alert-${type}`;
             alert.style.display = 'block';
+            document.getElementById('emailNotVerified').style.display = 'none';
             
             if (type === 'success') {
                 setTimeout(() => {
