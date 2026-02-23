@@ -495,12 +495,7 @@
             
             try {
                 // Configure action URL to redirect to our custom reset page
-                const actionCodeSettings = {
-                    url: `${window.location.origin}/reset-password`,
-                    handleCodeInApp: true
-                };
-                
-                await auth.sendPasswordResetEmail(email, actionCodeSettings);
+                await auth.sendPasswordResetEmail(email);
                 showModalAlert('Password reset email sent! Check your inbox.', 'success');
                 
                 setTimeout(() => {
@@ -547,12 +542,8 @@
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 const user = userCredential.user;
                 
-                // Send verification email with custom action URL
-                const actionCodeSettings = {
-                    url: `${window.location.origin}/login`,
-                    handleCodeInApp: false
-                };
-                await user.sendEmailVerification(actionCodeSettings);
+                // Send verification email
+                await user.sendEmailVerification();
                 
                 // Sign out immediately
                 await auth.signOut();
