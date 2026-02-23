@@ -451,6 +451,78 @@ router.delete('/admin/users/:userId', verifyFirebaseToken, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/delete-users
+ * Batch delete multiple users (admin only)
+ */
+router.post('/admin/delete-users', verifyFirebaseToken, async (req, res) => {
+    try {
+        // Check if requester is admin
+        const adminDoc = await getDb().collection('users').doc(req.userId).get();
+        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+            return res.status(403).json({ error: 'Forbidden: Admin access required' });
+        }
+        
+        const { userIds } = req.body;
+        
+        if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ error: 'Invalid or empty userIds array' });
+        }
+        
+        // Don't allow deleting yourself
+        if (userIds.includes(req.userId)) {
+            return res.status(400).json({ error: 'Cannot delete your own account' });
+        }
+        
+        let deletedCount = 0;
+        let failedCount = 0;
+        const errors = [];
+        
+        // Delete each user
+        for (const userId of userIds) {
+            try {
+                // Delete user from Firestore
+                await getDb().collection('users').doc(userId).delete();
+                
+                // Delete associated license if exists
+                const licensesSnapshot = await getDb().collection('licenses')
+                    .where('userId', '==', userId)
+                    .get();
+                
+                for (const licenseDoc of licensesSnapshot.docs) {
+                    await licenseDoc.ref.delete();
+                }
+                
+                // Delete user from Firebase Auth
+                try {
+                    await admin.auth().deleteUser(userId);
+                } catch (authError) {
+                    console.error(`Failed to delete user ${userId} from Auth:`, authError);
+                    // Continue even if auth deletion fails
+                }
+                
+                deletedCount++;
+            } catch (error) {
+                console.error(`Failed to delete user ${userId}:`, error);
+                failedCount++;
+                errors.push({ userId, error: error.message });
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: `Deleted ${deletedCount} user(s)`,
+            deletedCount,
+            failedCount,
+            errors: errors.length > 0 ? errors : undefined
+        });
+        
+    } catch (error) {
+        console.error('Batch delete users error:', error);
+        res.status(500).json({ error: 'Failed to delete users' });
+    }
+});
+
+/**
  * GET /api/admin/analytics
  * Get analytics data (admin only)
  */

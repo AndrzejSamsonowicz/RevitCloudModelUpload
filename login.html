@@ -477,7 +477,13 @@
             resetBtn.innerHTML = 'Sending... <span class="loading-spinner"></span>';
             
             try {
-                await auth.sendPasswordResetEmail(email);
+                // Configure action URL to redirect to our custom reset page
+                const actionCodeSettings = {
+                    url: `${window.location.origin}/reset-password`,
+                    handleCodeInApp: true
+                };
+                
+                await auth.sendPasswordResetEmail(email, actionCodeSettings);
                 showModalAlert('Password reset email sent! Check your inbox.', 'success');
                 
                 setTimeout(() => {
