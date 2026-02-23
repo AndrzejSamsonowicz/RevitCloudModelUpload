@@ -1472,9 +1472,23 @@ async function savePublishingSchedules() {
         showMessage('publishMessage', `✓ Saved ${schedules.length} publishing schedule(s)`, 'success');
         console.log('Schedules saved:', enhancedSchedules);
         
+        // Show toast notification
+        showToast(
+            'Schedules Saved!',
+            `${schedules.length} publishing schedule(s) saved successfully`,
+            'success'
+        );
+        
     } catch (error) {
         console.error('Error saving schedules:', error);
         showMessage('publishMessage', `Failed to save schedules: ${error.message}`, 'error');
+        
+        // Show toast notification
+        showToast(
+            'Save Failed',
+            `Failed to save schedules: ${error.message}`,
+            'error'
+        );
     }
 }
 
