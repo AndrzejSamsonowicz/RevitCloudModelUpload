@@ -440,9 +440,36 @@ async function publishModel() {
                 addLog(`  Command ID: ${data.commandId}`);
                 addLog(`  Status: ${data.status}`);
                 successCount++;
+                
+                // Save to publishing history
+                saveToPublishingHistory(
+                    file.fileName,
+                    selectedProjectName || 'Unknown Project',
+                    'success',
+                    'Publish command initiated successfully',
+                    {
+                        commandId: data.commandId,
+                        status: data.status,
+                        itemId: file.itemId,
+                        projectId: selectedProjectId
+                    }
+                );
             } else {
                 addLog(`  ✗ Error: ${data.error}`, 'error');
                 failCount++;
+                
+                // Save to publishing history
+                saveToPublishingHistory(
+                    file.fileName,
+                    selectedProjectName || 'Unknown Project',
+                    'error',
+                    `Publish failed: ${data.error}`,
+                    {
+                        itemId: file.itemId,
+                        projectId: selectedProjectId,
+                        errorDetails: data.error
+                    }
+                );
             }
 
             // Small delay between requests
@@ -594,6 +621,7 @@ let originalHubsData = null;
 let originalProjectsData = null;
 let selectedHubId = null;
 let selectedProjectId = null;
+let selectedProjectName = null;
 
 async function loadHubs() {
     if (!sessionId) {
@@ -768,6 +796,7 @@ function filterProjects() {
 
 async function selectProject(projectId, projectName) {
     selectedProjectId = projectId;
+    selectedProjectName = projectName;
     
     // Update UI
     document.querySelectorAll('.project-item').forEach(item => item.classList.remove('selected'));
@@ -1490,5 +1519,130 @@ async function loadPublishingSchedules() {
         
     } catch (error) {
         console.error('Error loading schedules:', error);
+    }
+}
+
+// Publishing History Functions
+function saveToPublishingHistory(fileName, projectName, status, message, details = {}) {
+    try {
+        const history = JSON.parse(localStorage.getItem('publishingHistory') || '[]');
+        const entry = {
+            timestamp: new Date().toISOString(),
+            fileName: fileName,
+            projectName: projectName,
+            status: status, // 'success', 'error', 'info', 'warning'
+            message: message,
+            details: details
+        };
+        
+        // Add to beginning of array (most recent first)
+        history.unshift(entry);
+        
+        // Keep only last 100 entries to avoid localStorage overflow
+        if (history.length > 100) {
+            history.splice(100);
+        }
+        
+        localStorage.setItem('publishingHistory', JSON.stringify(history));
+    } catch (error) {
+        console.error('Error saving to publishing history:', error);
+    }
+}
+
+function showPublishingHistory() {
+    const modal = document.getElementById('publishingHistoryModal');
+    modal.style.display = 'flex';
+    refreshPublishingHistory();
+}
+
+function closePublishingHistory() {
+    const modal = document.getElementById('publishingHistoryModal');
+    modal.style.display = 'none';
+}
+
+function refreshPublishingHistory() {
+    try {
+        const history = JSON.parse(localStorage.getItem('publishingHistory') || '[]');
+        const contentDiv = document.getElementById('publishingHistoryContent');
+        const countSpan = document.getElementById('historyCount');
+        
+        countSpan.textContent = `${history.length} record${history.length !== 1 ? 's' : ''}`;
+        
+        if (history.length === 0) {
+            contentDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No publishing history found</div>';
+            return;
+        }
+        
+        let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+        
+        history.forEach((entry, index) => {
+            const date = new Date(entry.timestamp);
+            const formattedDate = date.toLocaleString();
+            
+            let statusColor = '#6c757d';
+            let statusIcon = 'ℹ';
+            if (entry.status === 'success') {
+                statusColor = '#28a745';
+                statusIcon = '✓';
+            } else if (entry.status === 'error') {
+                statusColor = '#dc3545';
+                statusIcon = '✗';
+            } else if (entry.status === 'warning') {
+                statusColor = '#ffc107';
+                statusIcon = '⚠';
+            }
+            
+            html += `
+                <div style="background: white; border-left: 4px solid ${statusColor}; padding: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold; color: #333; margin-bottom: 4px;">
+                                <span style="color: ${statusColor}; margin-right: 8px; font-size: 16px;">${statusIcon}</span>
+                                ${entry.fileName}
+                            </div>
+                            <div style="font-size: 12px; color: #666;">
+                                ${entry.projectName || 'Unknown Project'}
+                            </div>
+                        </div>
+                        <div style="font-size: 12px; color: #999; white-space: nowrap; margin-left: 15px;">
+                            ${formattedDate}
+                        </div>
+                    </div>
+                    <div style="color: #333; font-size: 14px;">
+                        ${entry.message}
+                    </div>
+                    ${entry.details && Object.keys(entry.details).length > 0 ? `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
+                            <details style="font-size: 12px; color: #666;">
+                                <summary style="cursor: pointer; user-select: none;">Details</summary>
+                                <pre style="margin-top: 8px; background: #f8f9fa; padding: 8px; border-radius: 4px; overflow-x: auto; font-size: 11px;">${JSON.stringify(entry.details, null, 2)}</pre>
+                            </details>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        contentDiv.innerHTML = html;
+    } catch (error) {
+        console.error('Error loading publishing history:', error);
+        document.getElementById('publishingHistoryContent').innerHTML = 
+            '<div style="text-align: center; color: #dc3545; padding: 20px;">Error loading history</div>';
+    }
+}
+
+function clearPublishingHistory() {
+    if (confirm('Are you sure you want to clear all publishing history? This cannot be undone.')) {
+        localStorage.removeItem('publishingHistory');
+        refreshPublishingHistory();
+    }
+}
+
+// Click outside modal to close
+window.onclick = function(event) {
+    const historyModal = document.getElementById('publishingHistoryModal');
+    if (event.target === historyModal) {
+        closePublishingHistory();
     }
 }
