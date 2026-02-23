@@ -1573,29 +1573,79 @@ function closePublishingHistory() {
     modal.style.display = 'none';
 }
 
-function refreshPublishingHistory() {
+async function refreshPublishingHistory() {
     try {
         console.log('Refreshing publishing history...');
-        const historyJson = localStorage.getItem('publishingHistory');
-        console.log('Raw localStorage data:', historyJson);
-        
-        const history = JSON.parse(historyJson || '[]');
-        console.log('Parsed history:', history);
-        console.log('History length:', history.length);
         
         const contentDiv = document.getElementById('publishingHistoryContent');
         const countSpan = document.getElementById('historyCount');
         
-        countSpan.textContent = `${history.length} record${history.length !== 1 ? 's' : ''}`;
+        // Show loading
+        contentDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">Loading history...</div>';
         
-        if (history.length === 0) {
+        // Get manual publishes from localStorage
+        const localHistoryJson = localStorage.getItem('publishingHistory');
+        console.log('Raw localStorage data:', localHistoryJson);
+        const localHistory = JSON.parse(localHistoryJson || '[]');
+        console.log('Local history:', localHistory);
+        
+        // Get scheduled publishes from Firestore
+        let firestoreHistory = [];
+        if (typeof firebase !== 'undefined' && firebase.auth() && firebase.auth().currentUser) {
+            try {
+                const userId = firebase.auth().currentUser.uid;
+                console.log('Fetching Firestore history for user:', userId);
+                
+                const db = firebase.firestore();
+                const logsSnapshot = await db.collection('publishingLogs')
+                    .where('userId', '==', userId)
+                    .orderBy('actualTime', 'desc')
+                    .limit(50)
+                    .get();
+                
+                firestoreHistory = logsSnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        timestamp: data.actualTime,
+                        fileName: data.fileName,
+                        projectName: 'Scheduled Publish', // Could enhance this later
+                        status: data.status,
+                        message: data.status === 'success' 
+                            ? `Scheduled publish completed at ${data.scheduledTime}` 
+                            : `Scheduled publish failed: ${data.error}`,
+                        details: {
+                            scheduledTime: data.scheduledTime,
+                            workItemId: data.workItemId,
+                            source: 'scheduled'
+                        }
+                    };
+                });
+                
+                console.log('Firestore history:', firestoreHistory);
+            } catch (error) {
+                console.error('Error fetching Firestore history:', error);
+            }
+        } else {
+            console.log('Firebase not authenticated, skipping Firestore history');
+        }
+        
+        // Combine and sort by timestamp (most recent first)
+        const allHistory = [...localHistory, ...firestoreHistory].sort((a, b) => {
+            return new Date(b.timestamp) - new Date(a.timestamp);
+        });
+        
+        console.log('Combined history length:', allHistory.length);
+        
+        countSpan.textContent = `${allHistory.length} record${allHistory.length !== 1 ? 's' : ''}`;
+        
+        if (allHistory.length === 0) {
             contentDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No publishing history found</div>';
             return;
         }
         
         let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
         
-        history.forEach((entry, index) => {
+        allHistory.forEach((entry, index) => {
             const date = new Date(entry.timestamp);
             const formattedDate = date.toLocaleString();
             
@@ -1612,6 +1662,12 @@ function refreshPublishingHistory() {
                 statusIcon = '⚠';
             }
             
+            // Determine source badge
+            const isScheduled = entry.details?.source === 'scheduled';
+            const sourceBadge = isScheduled 
+                ? '<span style="background: #0696D7; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">SCHEDULED</span>'
+                : '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">MANUAL</span>';
+            
             html += `
                 <div style="background: white; border-left: 4px solid ${statusColor}; padding: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
@@ -1619,6 +1675,7 @@ function refreshPublishingHistory() {
                             <div style="font-weight: bold; color: #333; margin-bottom: 4px;">
                                 <span style="color: ${statusColor}; margin-right: 8px; font-size: 16px;">${statusIcon}</span>
                                 ${entry.fileName}
+                                ${sourceBadge}
                             </div>
                             <div style="font-size: 12px; color: #666;">
                                 ${entry.projectName || 'Unknown Project'}
@@ -1653,7 +1710,7 @@ function refreshPublishingHistory() {
 }
 
 function clearPublishingHistory() {
-    if (confirm('Are you sure you want to clear all publishing history? This cannot be undone.')) {
+    if (confirm('Are you sure you want to clear your local publishing history? This will only clear manual publishes, not scheduled publishes from Firestore.')) {
         localStorage.removeItem('publishingHistory');
         refreshPublishingHistory();
     }
