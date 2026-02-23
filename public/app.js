@@ -1535,6 +1535,8 @@ async function loadPublishingSchedules() {
 // Publishing History Functions
 function saveToPublishingHistory(fileName, projectName, status, message, details = {}) {
     try {
+        console.log('Saving to publishing history:', { fileName, projectName, status, message, details });
+        
         const history = JSON.parse(localStorage.getItem('publishingHistory') || '[]');
         const entry = {
             timestamp: new Date().toISOString(),
@@ -1554,6 +1556,7 @@ function saveToPublishingHistory(fileName, projectName, status, message, details
         }
         
         localStorage.setItem('publishingHistory', JSON.stringify(history));
+        console.log('Successfully saved to history. Total records:', history.length);
     } catch (error) {
         console.error('Error saving to publishing history:', error);
     }
@@ -1572,7 +1575,14 @@ function closePublishingHistory() {
 
 function refreshPublishingHistory() {
     try {
-        const history = JSON.parse(localStorage.getItem('publishingHistory') || '[]');
+        console.log('Refreshing publishing history...');
+        const historyJson = localStorage.getItem('publishingHistory');
+        console.log('Raw localStorage data:', historyJson);
+        
+        const history = JSON.parse(historyJson || '[]');
+        console.log('Parsed history:', history);
+        console.log('History length:', history.length);
+        
         const contentDiv = document.getElementById('publishingHistoryContent');
         const countSpan = document.getElementById('historyCount');
         
