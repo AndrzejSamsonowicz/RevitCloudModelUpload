@@ -393,8 +393,8 @@ async function publishModel() {
         return;
     }
 
-    // Get all selected files
-    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]:checked');
+    // Get all selected files - exclude weekday checkboxes used for scheduling
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]:checked:not(.weekday-checkbox)');
     const selectedFiles = Array.from(checkboxes).map(cb => {
         const item = cb.closest('.file-checkbox-item');
         return {
@@ -1209,7 +1209,7 @@ async function onProjectSelected() {
 }
 
 function updateFileSelection() {
-    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]');
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]:not(.weekday-checkbox)');
     const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
     
     document.getElementById('fileSelectionCount').textContent = `${checkedCount} file${checkedCount !== 1 ? 's' : ''} selected`;
@@ -1240,13 +1240,13 @@ function updateFileSelection() {
 }
 
 function selectAllFiles() {
-    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]');
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]:not(.weekday-checkbox)');
     checkboxes.forEach(cb => cb.checked = true);
     updateFileSelection();
 }
 
 function deselectAllFiles() {
-    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]');
+    const checkboxes = document.querySelectorAll('#rvtFilesList input[type="checkbox"]:not(.weekday-checkbox)');
     checkboxes.forEach(cb => cb.checked = false);
     updateFileSelection();
 }
