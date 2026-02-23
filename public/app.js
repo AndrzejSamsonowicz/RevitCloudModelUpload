@@ -1598,10 +1598,10 @@ async function refreshPublishingHistory() {
                 console.log('Fetching Firestore history for user:', userId);
                 
                 const db = firebase.firestore();
+                // Query without orderBy to avoid index requirement - sort client-side instead
                 const logsSnapshot = await db.collection('publishingLogs')
                     .where('userId', '==', userId)
-                    .orderBy('actualTime', 'desc')
-                    .limit(50)
+                    .limit(100)  // Increased limit since we'll sort client-side
                     .get();
                 
                 firestoreHistory = logsSnapshot.docs.map(doc => {
