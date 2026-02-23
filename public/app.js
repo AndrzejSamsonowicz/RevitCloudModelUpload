@@ -1768,10 +1768,38 @@ async function refreshPublishingHistory() {
     }
 }
 
-function clearPublishingHistory() {
-    if (confirm('Are you sure you want to clear your local publishing history? This will only clear manual publishes, not scheduled publishes from Firestore.')) {
-        localStorage.removeItem('publishingHistory');
-        refreshPublishingHistory();
+async function clearPublishingHistory() {
+    if (confirm('Are you sure you want to clear all publishing history? This will clear both manual and scheduled publish logs.')) {
+        try {
+            // Clear localStorage (manual publishes)
+            localStorage.removeItem('publishingHistory');
+            
+            // Clear Firestore scheduled publishes
+            if (typeof firebase !== 'undefined' && userId && typeof firebase.firestore === 'function') {
+                const db = firebase.firestore();
+                const logsSnapshot = await db.collection('publishingLogs')
+                    .where('userId', '==', userId)
+                    .get();
+                
+                const batch = db.batch();
+                logsSnapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                
+                await batch.commit();
+                console.log(`Deleted ${logsSnapshot.docs.length} scheduled publish logs from Firestore`);
+            }
+            
+            // Refresh the display
+            await refreshPublishingHistory();
+            
+            // Show success toast
+            showToast('History Cleared', 'All publishing history has been cleared', 'success');
+            
+        } catch (error) {
+            console.error('Error clearing history:', error);
+            showToast('Clear Failed', `Failed to clear history: ${error.message}`, 'error');
+        }
     }
 }
 
