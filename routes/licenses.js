@@ -232,9 +232,9 @@ router.post('/admin/activate-license', verifyFirebaseToken, async (req, res) => 
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
-        const { userId, licenseKey, durationMonths = 12 } = req.body;
+        const { userId, days = 365 } = req.body;
         
-        if (!userId || !licenseKey) {
+        if (!userId) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         
@@ -246,25 +246,25 @@ router.post('/admin/activate-license', verifyFirebaseToken, async (req, res) => 
         
         const userData = userDoc.data();
         
-        // Check if license exists
-        const licenseDoc = await getDb().collection('licenses').doc(licenseKey).get();
-        
-        if (!licenseDoc.exists) {
-            return res.status(404).json({ error: 'License not found' });
-        }
+        // Generate new license key
+        const licenseKey = generateLicenseKey();
         
         // Calculate expiry date
         const expiryDate = new Date();
-        expiryDate.setMonth(expiryDate.getMonth() + durationMonths);
+        expiryDate.setDate(expiryDate.getDate() + days);
         
-        // Update license
-        await getDb().collection('licenses').doc(licenseKey).update({
+        // Create license document
+        await getDb().collection('licenses').doc(licenseKey).set({
+            licenseKey,
             userId,
             email: userData.email,
             status: 'active',
+            price: 900, // Default price
+            purchaseDate: admin.firestore.FieldValue.serverTimestamp(),
             expiryDate: expiryDate.toISOString(),
             activatedBy: 'admin',
-            activatedAt: admin.firestore.FieldValue.serverTimestamp()
+            activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            paypalOrderId: 'ADMIN-ACTIVATED'
         });
         
         // Update user
@@ -278,6 +278,7 @@ router.post('/admin/activate-license', verifyFirebaseToken, async (req, res) => 
         res.json({
             success: true,
             message: 'License activated successfully',
+            licenseKey,
             expiryDate: expiryDate.toISOString()
         });
         
