@@ -143,16 +143,38 @@ function login() {
 }
 
 async function logout() {
-    if (!sessionId) return;
-
     try {
-        await fetch(`/oauth/logout/${sessionId}`, { method: 'POST' });
+        // Sign out from Firebase first
+        if (typeof firebase !== 'undefined' && firebase.auth()) {
+            await firebase.auth().signOut();
+            console.log('Signed out from Firebase');
+        }
+        
+        if (sessionId) {
+            await fetch(`/oauth/logout/${sessionId}`, { method: 'POST' });
+        }
         sessionId = null;
         userId = null;
+        
+        // Clear local storage
+        localStorage.clear();
+        
+        // Clear session storage
+        sessionStorage.clear();
+        
+        // Clear cookies
+        document.cookie.split(";").forEach(function(c) {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+        
         updateAuthUI(false);
-        showMessage('authMessage', 'Logged out successfully', 'info');
+        
+        // Redirect to login page
+        window.location.href = '/login';
     } catch (error) {
-        showMessage('authMessage', `Logout failed: ${error.message}`, 'error');
+        console.error('Logout error:', error);
+        // Still redirect even if logout API call fails
+        window.location.href = '/login';
     }
 }
 

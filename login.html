@@ -234,7 +234,7 @@
 <body>
     <div class="login-container">
         <div class="logo-section">
-            <h1>ACC User Management</h1>
+            <h1>Revit Cloud Model Publisher</h1>
         </div>
         
         <!-- Alert Messages -->
@@ -260,12 +260,12 @@
         <div class="links-section">
             <a href="#" id="forgotPasswordLink">Forgot Password?</a>
             <span style="color: #dee2e6;">|</span>
-            <a href="register.html">Create Account</a>
+            <a href="/register">Create Account</a>
         </div>
         
         <div class="divider">OR</div>
         
-        <button class="btn btn-secondary" onclick="window.location.href='purchase.html'">
+        <button class="btn btn-secondary" onclick="window.location.href='/purchase'">
             Purchase License
         </button>
     </div>
@@ -308,8 +308,16 @@
         const LOCKOUT_TIME = 5 * 60 * 1000; // Reduced from 15 to 5 minutes
         let lockoutUntil = parseInt(localStorage.getItem('lockoutUntil') || '0') || null;
         
+        // Flag to prevent auto-redirect after manual logout
+        let justLoggedOut = false;
+        
         // Check if user is already logged in
         auth.onAuthStateChanged(async (user) => {
+            // If user just logged out, don't auto-redirect
+            if (justLoggedOut) {
+                return;
+            }
+            
             if (user) {
                 // Check if email is verified
                 if (!user.emailVerified) {
@@ -318,49 +326,55 @@
                     return;
                 }
                 
-                try {
-                    // Get auth token
-                    const token = await user.getIdToken();
-                    
-                    // Validate login with server
-                    const response = await fetch(`${window.location.origin}/api/auth/verify`, {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${token}`
+                // Show "Already logged in" message instead of auto-redirecting
+                showAlert('You are already logged in. Click Logout to sign out or wait to be redirected.', 'info');
+                
+                // Delay redirect by 3 seconds to give user time to logout if needed
+                setTimeout(async () => {
+                    try {
+                        // Get auth token
+                        const token = await user.getIdToken();
+                        
+                        // Validate login with server
+                        const response = await fetch(`${window.location.origin}/api/auth/verify`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (!response.ok || !data.success) {
+                            showAlert(data.error || 'Login validation failed', 'error');
+                            await auth.signOut();
+                            return;
                         }
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (!response.ok || !data.success) {
-                        showAlert(data.error || 'Login validation failed', 'error');
-                        await auth.signOut();
-                        return;
-                    }
-                    
-                    // Update last login time
-                    await fetch(`${window.location.origin}/api/auth/update-last-login`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`
+                        
+                        // Update last login time
+                        await fetch(`${window.location.origin}/api/auth/update-last-login`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        // Redirect based on user role
+                        showAlert('Login successful! Redirecting...', 'success');
+                        if (data.user.isAdmin) {
+                            window.location.href = '/admin';
+                        } else {
+                            showAlert('Access denied. This application is only available to administrators.', 'error');
+                            await auth.signOut();
+                            return;
                         }
-                    });
-                    
-                    // Redirect based on user role
-                    showAlert('Login successful! Redirecting...', 'success');
-                    if (data.user.isAdmin) {
-                        window.location.href = '/admin';
-                    } else {
-                        showAlert('Access denied. This application is only available to administrators.', 'error');
+                        
+                    } catch (error) {
+                        console.error('Error validating login:', error);
+                        showAlert('Error validating login. Please try again.', 'error');
                         await auth.signOut();
-                        return;
                     }
-                    
-                } catch (error) {
-                    console.error('Error validating login:', error);
-                    showAlert('Error validating login. Please try again.', 'error');
-                    await auth.signOut();
-                }
+                }, 3000); // 3 second delay
             }
         });
         
@@ -522,6 +536,38 @@
             const modal = document.getElementById('resetPasswordModal');
             if (event.target === modal) {
                 closeResetModal();
+            }
+        }
+        
+        // Logout function
+        async function handleLogout() {
+            try {
+                justLoggedOut = true; // Prevent auto-redirect
+                
+                // Sign out from Firebase
+                await auth.signOut();
+                
+                // Clear all local storage
+                localStorage.clear();
+                
+                // Clear session storage
+                sessionStorage.clear();
+                
+                // Clear any cookies (if applicable)
+                document.cookie.split(";").forEach(function(c) {
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                });
+                
+                showAlert('Logged out successfully. You can now login as a different user.', 'success');
+                
+                // Keep the flag set to prevent re-login
+                setTimeout(() => {
+                    justLoggedOut = false; // Reset after 2 seconds
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Logout error:', error);
+                showAlert('Error logging out. Please try again.', 'error');
             }
         }
     </script>
