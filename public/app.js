@@ -729,6 +729,9 @@ async function selectHub(hubId, hubName, region) {
     // Hide files section until project is selected
     document.getElementById('filesSection').style.display = 'none';
     
+    // Hide publishing action buttons until project is selected
+    document.getElementById('publishingActions').style.display = 'none';
+    
     // Load projects
     const projectsList = document.getElementById('projectsList');
     projectsList.innerHTML = '<div class="no-items">Loading projects...</div>';
@@ -856,6 +859,7 @@ async function loadRevitFiles(projectId, folderId) {
             if (!data.files || data.files.length === 0) {
                 filesList.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No Revit cloud models found</div>';
                 allRevitFiles = [];
+                document.getElementById('publishingActions').style.display = 'none';
                 hideLoadingModal();
                 return;
             }
@@ -868,11 +872,17 @@ async function loadRevitFiles(projectId, folderId) {
             
             renderFilesList();
             updateFileSelection();
+            
+            // Show publishing action buttons after files are loaded
+            document.getElementById('publishingActions').style.display = 'block';
+            
             hideLoadingModal();
         } else {
+            document.getElementById('publishingActions').style.display = 'none';
             showLoadingModalError(`Error loading Revit files: ${data.error}`);
         }
     } catch (error) {
+        document.getElementById('publishingActions').style.display = 'none';
         showLoadingModalError(`Failed to load Revit files: ${error.message}`);
     }
 }
