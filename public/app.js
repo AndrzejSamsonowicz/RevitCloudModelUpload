@@ -123,13 +123,31 @@ window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     sessionId = params.get('session');
 
+    // If no session in URL, check if we have a stored session
+    if (!sessionId) {
+        sessionId = sessionStorage.getItem('aps_session');
+    }
+
     if (sessionId) {
-        checkSession().then(() => {
-            // Auto-upload AppBundle after successful authentication
-            autoUploadAppBundle();
+        // Store session for persistence across page reloads
+        sessionStorage.setItem('aps_session', sessionId);
+        
+        checkSession().then((isAuthenticated) => {
+            if (!isAuthenticated) {
+                // Session is invalid, redirect to login
+                sessionStorage.removeItem('aps_session');
+                window.location.href = '/login';
+            } else {
+                // Auto-upload AppBundle after successful authentication
+                autoUploadAppBundle();
+            }
         });
         // Clean URL
         window.history.replaceState({}, document.title, '/');
+    } else {
+        // No session available, redirect to login
+        console.log('No active session found, redirecting to login...');
+        window.location.href = '/login';
     }
 
     if (params.get('error')) {
@@ -159,7 +177,7 @@ async function logout() {
         // Clear local storage
         localStorage.clear();
         
-        // Clear session storage
+        // Clear session storage (including stored sessionId)
         sessionStorage.clear();
         
         // Clear cookies
@@ -179,27 +197,35 @@ async function logout() {
 }
 
 async function checkSession() {
-    if (!sessionId) return;
+    if (!sessionId) return false;
 
     try {
         const response = await fetch(`/oauth/session/${sessionId}`);
         if (response.ok) {
             const data = await response.json();
-            userId = data.userId; // Store consistent user ID
-            console.log('User authenticated:', data.userEmail || userId);
-            updateAuthUI(data.authenticated);
             if (data.authenticated) {
+                userId = data.userId; // Store consistent user ID
+                console.log('User authenticated:', data.userEmail || userId);
+                updateAuthUI(true);
                 // Auto-load hubs after authentication
                 await loadHubs();
+                return true;
+            } else {
+                sessionId = null;
+                userId = null;
+                updateAuthUI(false);
+                return false;
             }
         } else {
             sessionId = null;
             userId = null;
             updateAuthUI(false);
+            return false;
         }
     } catch (error) {
         console.error('Session check failed:', error);
         updateAuthUI(false);
+        return false;
     }
 }
 
