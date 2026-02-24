@@ -149,8 +149,10 @@ window.addEventListener('DOMContentLoaded', async () => {
                     } else {
                         // Firebase authenticated but OAuth session invalid
                         sessionStorage.removeItem('aps_session');
+                        sessionId = null;
                         document.body.style.visibility = 'visible';
                         updateAuthUI(true);
+                        await loadHubs(); // This will show "Login with Autodesk" button
                     }
                     // Clean URL
                     window.history.replaceState({}, document.title, '/');
@@ -159,6 +161,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                     // Show app and let user authenticate with Autodesk when needed
                     document.body.style.visibility = 'visible';
                     updateAuthUI(true);
+                    await loadHubs(); // This will show "Login with Autodesk" button
                 }
             } else {
                 // Not authenticated with Firebase, redirect to login
@@ -680,14 +683,22 @@ let selectedProjectId = null;
 let selectedProjectName = null;
 
 async function loadHubs() {
+    const hubsList = document.getElementById('hubsList');
+    
     if (!sessionId) {
-        const errorDiv = document.getElementById('error');
-        errorDiv.textContent = 'Please log in first';
-        errorDiv.style.display = 'block';
+        hubsList.innerHTML = `
+            <div class="no-items" style="padding: 30px; line-height: 1.6;">
+                <p style="margin-bottom: 15px; font-weight: bold;">Connect to Autodesk</p>
+                <p style="margin-bottom: 15px; color: #666;">To access your hubs, projects and files, you need to connect your Autodesk account.</p>
+                <button onclick="login()" style="margin: 15px auto 0; display: block;">Login with Autodesk</button>
+            </div>
+        `;
         return;
     }
 
     try {
+        hubsList.innerHTML = '<div class="no-items">Loading hubs...</div>';
+        
         const response = await fetch('/api/data-management/hubs', {
             headers: { 'Authorization': `Bearer ${sessionId}` }
         });
@@ -698,10 +709,22 @@ async function loadHubs() {
             displayHubs(data);
             // Content panel is already shown by updateAuthUI
         } else {
-            showMessage('publishMessage', `Error loading hubs: ${data.error}`, 'error');
+            hubsList.innerHTML = `
+                <div class="no-items" style="padding: 30px; line-height: 1.6; color: #dc3545;">
+                    <p style="margin-bottom: 15px; font-weight: bold;">Error loading hubs</p>
+                    <p style="margin-bottom: 15px;">${data.error}</p>
+                    <button onclick="login()" style="margin: 15px auto 0; display: block;">Reconnect to Autodesk</button>
+                </div>
+            `;
         }
     } catch (error) {
-        showMessage('publishMessage', `Failed to load hubs: ${error.message}`, 'error');
+        hubsList.innerHTML = `
+            <div class="no-items" style="padding: 30px; line-height: 1.6; color: #dc3545;">
+                <p style="margin-bottom: 15px; font-weight: bold;">Failed to load hubs</p>
+                <p style="margin-bottom: 15px;">${error.message}</p>
+                <button onclick="login()" style="margin: 15px auto 0; display: block;">Reconnect to Autodesk</button>
+            </div>
+        `;
     }
 }
 
