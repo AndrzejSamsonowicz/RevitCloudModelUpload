@@ -328,6 +328,9 @@
             }
             
             if (user) {
+                // Force reload user to get latest emailVerified status
+                await user.reload();
+                
                 // Check if email is verified
                 if (!user.emailVerified) {
                     showAlert('Please verify your email before logging in. Check your inbox.', 'error');
@@ -414,6 +417,9 @@
             try {
                 const userCredential = await auth.signInWithEmailAndPassword(email, password);
                 const user = userCredential.user;
+                
+                // Force reload user to get latest emailVerified status from server
+                await user.reload();
                 
                 // Check email verification
                 if (!user.emailVerified) {
