@@ -570,6 +570,57 @@ router.post('/admin/verify-email', verifyFirebaseToken, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/reset-password
+ * Manually reset user's password (admin only)
+ */
+router.post('/admin/reset-password', verifyFirebaseToken, async (req, res) => {
+    try {
+        // Check if requester is admin
+        const adminDoc = await getDb().collection('users').doc(req.userId).get();
+        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+            return res.status(403).json({ error: 'Forbidden: Admin access required' });
+        }
+        
+        const { userId, newPassword } = req.body;
+        
+        if (!userId || !newPassword) {
+            return res.status(400).json({ error: 'Missing userId or newPassword' });
+        }
+        
+        // Validate password length
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+        
+        // Check if user exists
+        const userDoc = await getDb().collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Update user password in Firebase Auth
+        await admin.auth().updateUser(userId, {
+            password: newPassword
+        });
+        
+        // Log the password reset in Firestore
+        await getDb().collection('users').doc(userId).update({
+            passwordResetAt: admin.firestore.FieldValue.serverTimestamp(),
+            passwordResetBy: 'admin'
+        });
+        
+        res.json({
+            success: true,
+            message: 'Password reset successfully'
+        });
+        
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Failed to reset password' });
+    }
+});
+
+/**
  * GET /api/admin/analytics
  * Get analytics data (admin only)
  */

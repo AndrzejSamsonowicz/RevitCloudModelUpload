@@ -495,6 +495,7 @@
                 <div class="section-header">
                     <h2>User Management</h2>
                     <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-warning" onclick="resetPasswordSelectedUser()" id="resetPasswordBtn" style="display: none;">🔑 Reset Password</button>
                         <button class="btn btn-success" onclick="verifySelectedUsers()" id="verifyUsersBtn" style="display: none;">✓ Verify Email</button>
                         <button class="btn btn-danger" onclick="deleteSelectedUsers()" id="deleteUsersBtn" style="display: none;">🗑️ Delete Selected</button>
                         <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
@@ -723,6 +724,36 @@
             <div class="modal-footer" id="deleteModalFooter">
                 <button class="btn btn-primary" onclick="closeModal('deleteUsersModal')" id="deleteCancelBtn">Cancel</button>
                 <button class="btn btn-danger" onclick="confirmDeleteUsers()" id="deleteConfirmBtn">Delete Users Permanently</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Reset Password Modal -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔑 Reset User Password</h3>
+            </div>
+            <div class="modal-body">
+                <div id="resetPasswordForm">
+                    <p>Reset password for: <strong id="resetPasswordEmail"></strong></p>
+                    <div style="margin: 20px 0;">
+                        <label for="newPasswordInput" style="display: block; margin-bottom: 8px; font-weight: 500;">New Password:</label>
+                        <input type="text" id="newPasswordInput" class="form-control" placeholder="Enter new password (min 6 characters)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <p style="font-size: 12px; color: #6c757d; margin-top: 5px;">Minimum 6 characters required</p>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-secondary" onclick="generateRandomPassword()" style="font-size: 14px;">🎲 Generate Random Password</button>
+                    </div>
+                </div>
+                <div id="resetPasswordProgress" class="deleting-progress" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>🔑 Resetting password... Please wait</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('resetPasswordModal')" id="resetPasswordCancelBtn">Cancel</button>
+                <button class="btn btn-warning" onclick="confirmResetPassword()" id="resetPasswordConfirmBtn">Reset Password</button>
             </div>
         </div>
     </div>
@@ -1366,15 +1397,25 @@
             const selectedCount = document.querySelectorAll('.user-checkbox:checked').length;
             const deleteBtn = document.getElementById('deleteUsersBtn');
             const verifyBtn = document.getElementById('verifyUsersBtn');
+            const resetPasswordBtn = document.getElementById('resetPasswordBtn');
             
             if (selectedCount > 0) {
                 deleteBtn.style.display = 'block';
                 deleteBtn.textContent = `🗑️ Delete Selected (${selectedCount})`;
                 verifyBtn.style.display = 'block';
                 verifyBtn.textContent = `✓ Verify Email (${selectedCount})`;
+                
+                // Show reset password button only if exactly 1 user is selected
+                if (selectedCount === 1) {
+                    resetPasswordBtn.style.display = 'block';
+                    resetPasswordBtn.textContent = '🔑 Reset Password';
+                } else {
+                    resetPasswordBtn.style.display = 'none';
+                }
             } else {
                 deleteBtn.style.display = 'none';
                 verifyBtn.style.display = 'none';
+                resetPasswordBtn.style.display = 'none';
             }
         }
         
@@ -1440,6 +1481,131 @@
             } catch (error) {
                 console.error('Verify users error:', error);
                 alert('❌ Error verifying users: ' + error.message);
+            }
+        }
+        
+        // Reset password for selected user (only works with 1 user)
+        function resetPasswordSelectedUser() {
+            const selectedCheckboxes = document.querySelectorAll('.user-checkbox:checked');
+            
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select a user to reset password');
+                return;
+            }
+            
+            if (selectedCheckboxes.length > 1) {
+                alert('Please select only ONE user to reset password');
+                return;
+            }
+            
+            const checkbox = selectedCheckboxes[0];
+            const userId = checkbox.getAttribute('data-user-id');
+            const email = checkbox.getAttribute('data-user-email');
+            
+            // Store in global variable for later use
+            window.resetPasswordUserId = userId;
+            
+            // Reset form
+            document.getElementById('resetPasswordEmail').textContent = email;
+            document.getElementById('newPasswordInput').value = '';
+            document.getElementById('resetPasswordForm').style.display = 'block';
+            document.getElementById('resetPasswordProgress').style.display = 'none';
+            
+            // Show modal
+            document.getElementById('resetPasswordModal').classList.add('active');
+        }
+        
+        // Generate random password
+        function generateRandomPassword() {
+            const length = 12;
+            const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+            let password = '';
+            
+            // Ensure at least one lowercase, one uppercase, one number, one special char
+            password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)];
+            password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
+            password += '0123456789'[Math.floor(Math.random() * 10)];
+            password += '!@#$%^&*'[Math.floor(Math.random() * 8)];
+            
+            // Fill the rest
+            for (let i = password.length; i < length; i++) {
+                password += charset[Math.floor(Math.random() * charset.length)];
+            }
+            
+            // Shuffle the password
+            password = password.split('').sort(() => Math.random() - 0.5).join('');
+            
+            document.getElementById('newPasswordInput').value = password;
+        }
+        
+        // Confirm reset password
+        async function confirmResetPassword() {
+            const newPassword = document.getElementById('newPasswordInput').value.trim();
+            const userId = window.resetPasswordUserId;
+            
+            if (!newPassword) {
+                alert('Please enter a new password');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                alert('Password must be at least 6 characters long');
+                return;
+            }
+            
+            if (!userId) {
+                alert('User ID not found. Please try again.');
+                return;
+            }
+            
+            // Ensure we have a fresh token
+            if (!currentUser) {
+                alert('Session expired. Please refresh the page.');
+                return;
+            }
+            
+            // Show progress
+            document.getElementById('resetPasswordForm').style.display = 'none';
+            document.getElementById('resetPasswordProgress').style.display = 'block';
+            document.getElementById('resetPasswordCancelBtn').disabled = true;
+            document.getElementById('resetPasswordConfirmBtn').disabled = true;
+            
+            try {
+                const token = await currentUser.getIdToken(true);
+                
+                const response = await fetch(`${serverURL}/api/admin/reset-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ userId, newPassword })
+                });
+                
+                if (response.ok) {
+                    alert(`✅ Password reset successfully!\n\nNew password: ${newPassword}\n\nPlease share this with the user securely.`);
+                    closeModal('resetPasswordModal');
+                    await refreshData();
+                } else {
+                    const errorData = await response.json();
+                    alert('❌ Error resetting password: ' + (errorData.error || 'Unknown error'));
+                    
+                    // Reset modal state
+                    document.getElementById('resetPasswordForm').style.display = 'block';
+                    document.getElementById('resetPasswordProgress').style.display = 'none';
+                    document.getElementById('resetPasswordCancelBtn').disabled = false;
+                    document.getElementById('resetPasswordConfirmBtn').disabled = false;
+                }
+                
+            } catch (error) {
+                console.error('Reset password error:', error);
+                alert('❌ Error resetting password: ' + error.message);
+                
+                // Reset modal state
+                document.getElementById('resetPasswordForm').style.display = 'block';
+                document.getElementById('resetPasswordProgress').style.display = 'none';
+                document.getElementById('resetPasswordCancelBtn').disabled = false;
+                document.getElementById('resetPasswordConfirmBtn').disabled = false;
             }
         }
         
