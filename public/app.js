@@ -259,6 +259,7 @@ function updateAuthUI(authenticated) {
     const logoutBtn = document.getElementById('logoutBtn');
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsBtn2 = document.getElementById('settingsBtn2');
+    const autodeskLoginBtn = document.getElementById('autodeskLoginBtn');
     const loginScreen = document.getElementById('loginScreen');
     const contentDiv = document.getElementById('content');
     const errorDiv = document.getElementById('error');
@@ -272,6 +273,15 @@ function updateAuthUI(authenticated) {
         if (logoutBtn) logoutBtn.classList.remove('hidden');
         if (settingsBtn2) settingsBtn2.classList.remove('hidden');
         if (errorDiv) errorDiv.style.display = 'none';
+        
+        // Show/hide Autodesk login button based on session
+        if (autodeskLoginBtn) {
+            if (sessionId) {
+                autodeskLoginBtn.classList.add('hidden');
+            } else {
+                autodeskLoginBtn.classList.remove('hidden');
+            }
+        }
     } else {
         // Show login screen, hide main content
         if (loginScreen) loginScreen.style.display = 'block';
@@ -280,6 +290,7 @@ function updateAuthUI(authenticated) {
         if (settingsBtn) settingsBtn.classList.remove('hidden');
         if (logoutBtn) logoutBtn.classList.add('hidden');
         if (settingsBtn2) settingsBtn2.classList.add('hidden');
+        if (autodeskLoginBtn) autodeskLoginBtn.classList.add('hidden');
     }
 }
 
