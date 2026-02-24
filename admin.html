@@ -495,6 +495,7 @@
                 <div class="section-header">
                     <h2>User Management</h2>
                     <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-success" onclick="verifySelectedUsers()" id="verifyUsersBtn" style="display: none;">✓ Verify Email</button>
                         <button class="btn btn-danger" onclick="deleteSelectedUsers()" id="deleteUsersBtn" style="display: none;">🗑️ Delete Selected</button>
                         <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
                     </div>
@@ -1360,16 +1361,85 @@
             updateDeleteButton();
         }
         
-        // Update delete button visibility
+        // Update delete and verify button visibility
         function updateDeleteButton() {
             const selectedCount = document.querySelectorAll('.user-checkbox:checked').length;
             const deleteBtn = document.getElementById('deleteUsersBtn');
+            const verifyBtn = document.getElementById('verifyUsersBtn');
             
             if (selectedCount > 0) {
                 deleteBtn.style.display = 'block';
                 deleteBtn.textContent = `🗑️ Delete Selected (${selectedCount})`;
+                verifyBtn.style.display = 'block';
+                verifyBtn.textContent = `✓ Verify Email (${selectedCount})`;
             } else {
                 deleteBtn.style.display = 'none';
+                verifyBtn.style.display = 'none';
+            }
+        }
+        
+        // Verify email for selected users
+        async function verifySelectedUsers() {
+            const selectedCheckboxes = document.querySelectorAll('.user-checkbox:checked');
+            
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one user to verify');
+                return;
+            }
+            
+            const userIds = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-user-id'));
+            const emails = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-user-email'));
+            
+            if (!confirm(`Are you sure you want to manually verify email for ${userIds.length} user(s)?\n\n${emails.join('\n')}`)) {
+                return;
+            }
+            
+            // Ensure we have a fresh token
+            if (!currentUser) {
+                alert('Session expired. Please refresh the page.');
+                return;
+            }
+            
+            try {
+                const token = await currentUser.getIdToken(true);
+                let successCount = 0;
+                let errorCount = 0;
+                
+                // Verify each user
+                for (const userId of userIds) {
+                    try {
+                        const response = await fetch(`${serverURL}/api/admin/verify-email`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({ userId })
+                        });
+                        
+                        if (response.ok) {
+                            successCount++;
+                        } else {
+                            errorCount++;
+                        }
+                    } catch (error) {
+                        console.error('Error verifying user:', userId, error);
+                        errorCount++;
+                    }
+                }
+                
+                if (successCount > 0) {
+                    alert(`✅ Successfully verified ${successCount} user(s)`);
+                    await refreshData();
+                }
+                
+                if (errorCount > 0) {
+                    alert(`⚠️ Failed to verify ${errorCount} user(s)`);
+                }
+                
+            } catch (error) {
+                console.error('Verify users error:', error);
+                alert('❌ Error verifying users: ' + error.message);
             }
         }
         

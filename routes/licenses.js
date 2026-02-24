@@ -523,6 +523,53 @@ router.post('/admin/delete-users', verifyFirebaseToken, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/verify-email
+ * Manually verify user's email (admin only)
+ */
+router.post('/admin/verify-email', verifyFirebaseToken, async (req, res) => {
+    try {
+        // Check if requester is admin
+        const adminDoc = await getDb().collection('users').doc(req.userId).get();
+        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+            return res.status(403).json({ error: 'Forbidden: Admin access required' });
+        }
+        
+        const { userId } = req.body;
+        
+        if (!userId) {
+            return res.status(400).json({ error: 'Missing userId' });
+        }
+        
+        // Check if user exists
+        const userDoc = await getDb().collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Update user in Firebase Auth to set emailVerified = true
+        await admin.auth().updateUser(userId, {
+            emailVerified: true
+        });
+        
+        // Update user document in Firestore
+        await getDb().collection('users').doc(userId).update({
+            emailVerified: true,
+            emailVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+            emailVerifiedBy: 'admin'
+        });
+        
+        res.json({
+            success: true,
+            message: 'Email verified successfully'
+        });
+        
+    } catch (error) {
+        console.error('Verify email error:', error);
+        res.status(500).json({ error: 'Failed to verify email' });
+    }
+});
+
+/**
  * GET /api/admin/analytics
  * Get analytics data (admin only)
  */
