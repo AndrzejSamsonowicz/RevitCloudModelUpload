@@ -700,8 +700,7 @@ async function loadHubs() {
         hubsList.innerHTML = `
             <div class="no-items" style="padding: 30px; line-height: 1.6;">
                 <p style="margin-bottom: 15px; font-weight: bold;">Connect to Autodesk</p>
-                <p style="margin-bottom: 15px; color: #666;">To access your hubs, projects and files, you need to connect your Autodesk account.</p>
-                <button onclick="login()" style="margin: 15px auto 0; display: block;">Login with Autodesk</button>
+                <p style="margin-bottom: 15px; color: #666;">To access your hubs, projects and files, click "Login with Autodesk" button above.</p>
             </div>
         `;
         return;
@@ -724,7 +723,7 @@ async function loadHubs() {
                 <div class="no-items" style="padding: 30px; line-height: 1.6; color: #dc3545;">
                     <p style="margin-bottom: 15px; font-weight: bold;">Error loading hubs</p>
                     <p style="margin-bottom: 15px;">${data.error}</p>
-                    <button onclick="login()" style="margin: 15px auto 0; display: block;">Reconnect to Autodesk</button>
+                    <p style="color: #666;">Please try clicking "Login with Autodesk" button above to reconnect.</p>
                 </div>
             `;
         }
@@ -733,7 +732,7 @@ async function loadHubs() {
             <div class="no-items" style="padding: 30px; line-height: 1.6; color: #dc3545;">
                 <p style="margin-bottom: 15px; font-weight: bold;">Failed to load hubs</p>
                 <p style="margin-bottom: 15px;">${error.message}</p>
-                <button onclick="login()" style="margin: 15px auto 0; display: block;">Reconnect to Autodesk</button>
+                <p style="color: #666;">Please try clicking "Login with Autodesk" button above to reconnect.</p>
             </div>
         `;
     }
