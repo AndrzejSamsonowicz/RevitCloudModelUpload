@@ -376,9 +376,7 @@
                         if (data.user.isAdmin) {
                             window.location.href = '/admin';
                         } else {
-                            showAlert('Access denied. This application is only available to administrators.', 'error');
-                            await auth.signOut();
-                            return;
+                            window.location.href = '/';
                         }
                         
                     } catch (error) {
