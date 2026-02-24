@@ -63,6 +63,22 @@ class APSClient {
     }
 
     /**
+     * Get 3-legged OAuth authorization URL with user-specific credentials
+     */
+    getAuthorizationUrlForUser(state = '', clientId, clientSecret) {
+        const scopes = ['data:read', 'data:write', 'code:all'];
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: clientId,
+            redirect_uri: this.callbackUrl,
+            scope: scopes.join(' '),
+            state: state
+        });
+
+        return `${APS_BASE_URL}/authentication/v2/authorize?${params.toString()}`;
+    }
+
+    /**
      * Exchange authorization code for 3-legged token
      */
     async get3LeggedToken(code) {
@@ -89,6 +105,36 @@ class APSClient {
         } catch (error) {
             console.error('Failed to exchange code for token:', error.response?.data || error.message);
             throw new Error('Token exchange failed');
+        }
+    }
+
+    /**
+     * Exchange authorization code for 3-legged token with user-specific credentials
+     */
+    async get3LeggedTokenForUser(code, clientId, clientSecret) {
+        try {
+            const response = await axios.post(
+                `${APS_BASE_URL}/authentication/v2/token`,
+                new URLSearchParams({
+                    grant_type: 'authorization_code',
+                    code: code,
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    redirect_uri: this.callbackUrl
+                }),
+                {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                }
+            );
+
+            return {
+                accessToken: response.data.access_token,
+                refreshToken: response.data.refresh_token,
+                expiresIn: response.data.expires_in
+            };
+        } catch (error) {
+            console.error('Failed to exchange code for token (user):', error.response?.data || error.message);
+            throw new Error('Token exchange failed: ' + (error.response?.data?.error || error.message));
         }
     }
 

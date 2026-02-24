@@ -6,10 +6,43 @@
 const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 // Helper functions to access Firebase services (initialized in server.js)
 const getDb = () => admin.firestore();
 const getAuth = () => admin.auth();
+
+/**
+ * Helper function to decrypt user credentials
+ */
+async function decryptUserCredentials(userId) {
+    const userDoc = await getDb().collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+        return null;
+    }
+    
+    const userData = userDoc.data();
+    
+    if (!userData.encryptedClientId || !userData.encryptedClientSecret) {
+        return null;
+    }
+    
+    const algorithm = 'aes-256-cbc';
+    const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+    const iv = Buffer.from(userData.encryptionIV, 'hex');
+    
+    const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
+    const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
+    
+    let clientId = decipherClientId.update(userData.encryptedClientId, 'hex', 'utf8');
+    clientId += decipherClientId.final('utf8');
+    
+    let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
+    clientSecret += decipherClientSecret.final('utf8');
+    
+    return { clientId, clientSecret };
+}
 
 /**
  * Verify Firebase ID Token Middleware
@@ -114,22 +147,37 @@ router.get('/user/:userId', verifyFirebaseToken, async (req, res) => {
 
 /**
  * PUT /api/auth/user/credentials
- * Store encrypted APS credentials for authenticated user
+ * Store APS credentials for authenticated user (server-side encryption)
  */
 router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
     try {
-        const { encryptedClientId, encryptedClientSecret, encryptionIV } = req.body;
+        const { clientId, clientSecret } = req.body;
         
-        if (!encryptedClientId || !encryptedClientSecret || !encryptionIV) {
+        if (!clientId || !clientSecret) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         
-        await getDb().collection('users').doc(req.userId).update({
+        // Encrypt credentials server-side
+        const crypto = require('crypto');
+        const algorithm = 'aes-256-cbc';
+        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+        
+        const iv = crypto.randomBytes(16);
+        const cipherClientId = crypto.createCipheriv(algorithm, key, iv);
+        const cipherClientSecret = crypto.createCipheriv(algorithm, key, iv);
+        
+        let encryptedClientId = cipherClientId.update(clientId, 'utf8', 'hex');
+        encryptedClientId += cipherClientId.final('hex');
+        
+        let encryptedClientSecret = cipherClientSecret.update(clientSecret, 'utf8', 'hex');
+        encryptedClientSecret += cipherClientSecret.final('hex');
+        
+        await getDb().collection('users').doc(req.userId).set({
             encryptedClientId,
             encryptedClientSecret,
-            encryptionIV,
+            encryptionIV: iv.toString('hex'),
             credentialsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
         
         res.json({ success: true, message: 'Credentials stored successfully' });
     } catch (error) {
@@ -140,7 +188,7 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
 
 /**
  * GET /api/auth/user/credentials
- * Retrieve encrypted APS credentials for authenticated user
+ * Retrieve decrypted APS credentials for authenticated user
  */
 router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
     try {
@@ -152,12 +200,36 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
         
         const userData = userDoc.data();
         
+        if (!userData.encryptedClientId || !userData.encryptedClientSecret) {
+            return res.json({
+                success: true,
+                credentials: {
+                    clientId: '',
+                    clientSecret: ''
+                }
+            });
+        }
+        
+        // Decrypt credentials server-side
+        const crypto = require('crypto');
+        const algorithm = 'aes-256-cbc';
+        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+        const iv = Buffer.from(userData.encryptionIV, 'hex');
+        
+        const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
+        const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
+        
+        let clientId = decipherClientId.update(userData.encryptedClientId, 'hex', 'utf8');
+        clientId += decipherClientId.final('utf8');
+        
+        let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
+        clientSecret += decipherClientSecret.final('utf8');
+        
         res.json({
             success: true,
             credentials: {
-                encryptedClientId: userData.encryptedClientId || '',
-                encryptedClientSecret: userData.encryptedClientSecret || '',
-                encryptionIV: userData.encryptionIV || ''
+                clientId,
+                clientSecret
             }
         });
     } catch (error) {
@@ -183,4 +255,4 @@ router.post('/update-last-login', verifyFirebaseToken, async (req, res) => {
     }
 });
 
-module.exports = { router, verifyFirebaseToken };
+module.exports = { router, verifyFirebaseToken, decryptUserCredentials };

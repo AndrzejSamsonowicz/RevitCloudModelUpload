@@ -30,21 +30,55 @@ function updateTimeSinceCells() {
     });
 }
 
-// Credentials Management
-function loadCredentials() {
-    const clientId = localStorage.getItem('APS_CLIENT_ID');
-    const clientSecret = localStorage.getItem('APS_CLIENT_SECRET');
-    return { clientId, clientSecret };
+// Credentials Management with Firestore (server-side encryption)
+
+// Load credentials from Firestore
+async function loadCredentialsFromFirestore() {
+    try {
+        const user = firebase.auth().currentUser;
+        if (!user) return { clientId: '', clientSecret: '' };
+        
+        const token = await user.getIdToken();
+        const response = await fetch('/api/auth/user/credentials', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            console.error('Failed to load credentials from Firestore');
+            return { clientId: '', clientSecret: '' };
+        }
+        
+        const data = await response.json();
+        
+        return {
+            clientId: data.credentials.clientId || '',
+            clientSecret: data.credentials.clientSecret || ''
+        };
+    } catch (error) {
+        console.error('Load credentials error:', error);
+        return { clientId: '', clientSecret: '' };
+    }
 }
 
-function showCredentialsModal() {
+async function showCredentialsModal() {
     const modal = document.getElementById('credentialsModal');
-    const { clientId, clientSecret } = loadCredentials();
+    const messageDiv = document.getElementById('credentialsMessage');
     
-    if (clientId) document.getElementById('clientIdInput').value = clientId;
-    if (clientSecret) document.getElementById('clientSecretInput').value = clientSecret;
+    messageDiv.textContent = 'Loading credentials...';
+    messageDiv.style.display = 'block';
+    messageDiv.style.backgroundColor = '#e3f2fd';
+    messageDiv.style.color = '#1976d2';
     
     modal.style.display = 'block';
+    
+    // Load from Firestore
+    const { clientId, clientSecret } = await loadCredentialsFromFirestore();
+    
+    document.getElementById('clientIdInput').value = clientId || '';
+    document.getElementById('clientSecretInput').value = clientSecret || '';
+    
+    messageDiv.textContent = '';
+    messageDiv.style.display = 'none';
 }
 
 function closeCredentialsModal() {
@@ -53,7 +87,7 @@ function closeCredentialsModal() {
     document.getElementById('credentialsMessage').textContent = '';
 }
 
-function saveCredentials() {
+async function saveCredentials() {
     const clientId = document.getElementById('clientIdInput').value.trim();
     const clientSecret = document.getElementById('clientSecretInput').value.trim();
     const messageDiv = document.getElementById('credentialsMessage');
@@ -66,17 +100,42 @@ function saveCredentials() {
         return;
     }
     
-    localStorage.setItem('APS_CLIENT_ID', clientId);
-    localStorage.setItem('APS_CLIENT_SECRET', clientSecret);
-    
-    messageDiv.textContent = 'Credentials saved successfully!';
+    messageDiv.textContent = 'Saving credentials...';
     messageDiv.style.display = 'block';
-    messageDiv.style.backgroundColor = '#e8f5e9';
-    messageDiv.style.color = '#2e7d32';
+    messageDiv.style.backgroundColor = '#e3f2fd';
+    messageDiv.style.color = '#1976d2';
     
-    setTimeout(() => {
-        closeCredentialsModal();
-    }, 1500);
+    try {
+        const user = firebase.auth().currentUser;
+        const token = await user.getIdToken();
+        
+        const response = await fetch('/api/auth/user/credentials', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ clientId, clientSecret })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to save credentials');
+        }
+        
+        messageDiv.textContent = 'Credentials saved successfully!';
+        messageDiv.style.backgroundColor = '#e8f5e9';
+        messageDiv.style.color = '#2e7d32';
+        
+        setTimeout(() => {
+            closeCredentialsModal();
+        }, 1500);
+    } catch (error) {
+        console.error('Save credentials error:', error);
+        messageDiv.textContent = error.message || 'Failed to save credentials';
+        messageDiv.style.backgroundColor = '#ffebee';
+        messageDiv.style.color = '#c62828';
+    }
 }
 
 function openApsGuide() {
@@ -181,8 +240,20 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Authentication functions
-function login() {
-    window.location.href = '/oauth/login';
+async function login() {
+    try {
+        const user = firebase.auth().currentUser;
+        if (!user) {
+            alert('Please log in with Firebase first');
+            return;
+        }
+        
+        const token = await user.getIdToken();
+        window.location.href = `/oauth/login?firebaseToken=${token}`;
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Failed to initiate Autodesk login');
+    }
 }
 
 async function logout() {

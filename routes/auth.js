@@ -1,19 +1,48 @@
 const express = require('express');
 const router = express.Router();
 const apsClient = require('../services/apsClient');
+const admin = require('firebase-admin');
+const { decryptUserCredentials } = require('./firebaseAuth');
 
 // Store user sessions (in production, use Redis or database)
 const sessions = new Map();
 
 /**
- * Initiate 3-legged OAuth flow
+ * Initiate 3-legged OAuth flow with user-specific credentials
  */
-router.get('/login', (req, res) => {
-    const state = Math.random().toString(36).substring(7);
-    sessions.set(state, { timestamp: Date.now() });
-    
-    const authUrl = apsClient.getAuthorizationUrl(state);
-    res.redirect(authUrl);
+router.get('/login', async (req, res) => {
+    try {
+        const { firebaseToken } = req.query;
+        
+        if (!firebaseToken) {
+            return res.status(400).send('Firebase authentication required');
+        }
+        
+        // Verify Firebase token and get user ID
+        const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+        const firebaseUserId = decodedToken.uid;
+        
+        // Get user's decrypted APS credentials
+        const credentials = await decryptUserCredentials(firebaseUserId);
+        
+        if (!credentials) {
+            return res.status(400).send('Please configure your APS credentials in Settings first');
+        }
+        
+        const state = Math.random().toString(36).substring(7);
+        sessions.set(state, {
+            timestamp: Date.now(),
+            firebaseUserId,
+            credentials
+        });
+        
+        // Get authorization URL with user-specific credentials
+        const authUrl = apsClient.getAuthorizationUrlForUser(state, credentials.clientId, credentials.clientSecret);
+        res.redirect(authUrl);
+    } catch (error) {
+        console.error('OAuth login error:', error);
+        res.status(500).send('Failed to initiate OAuth flow: ' + error.message);
+    }
 });
 
 /**
@@ -26,12 +55,14 @@ router.get('/callback', async (req, res) => {
         return res.status(400).send('Authorization code missing');
     }
 
-    if (!sessions.has(state)) {
+    const sessionState = sessions.get(state);
+    if (!sessionState) {
         return res.status(400).send('Invalid state parameter');
     }
 
     try {
-        const tokenData = await apsClient.get3LeggedToken(code);
+        // Exchange code for token using user-specific credentials
+        const tokenData = await apsClient.get3LeggedTokenForUser(code, sessionState.credentials.clientId, sessionState.credentials.clientSecret);
         
         // Get user profile to get consistent userId
         let userProfile;
@@ -50,16 +81,17 @@ router.get('/callback', async (req, res) => {
             ...tokenData,
             userId: userProfile.userId,
             userEmail: userProfile.email,
+            firebaseUserId: sessionState.firebaseUserId,
+            credentials: sessionState.credentials,
             timestamp: Date.now()
         });
         
         // Also store token in Firestore for scheduled publishing
-        // Use consistent APS userId instead of temporary sessionId
-        const admin = require('firebase-admin');
+        // Use Firebase userId for the Firestore document
         const db = admin.firestore();
         
         try {
-            const userId = userProfile.userId;
+            const userId = sessionState.firebaseUserId;
             const now = Date.now();
             
             await db.collection('users').doc(userId).set({
@@ -67,13 +99,14 @@ router.get('/callback', async (req, res) => {
                 apsRefreshToken: tokenData.refreshToken,
                 apsTokenExpiry: now + (tokenData.expiresIn * 1000),
                 sessionId: sessionId,
+                apsUserId: userProfile.userId,
                 email: userProfile.email,
                 firstName: userProfile.firstName,
                 lastName: userProfile.lastName,
                 lastLogin: now
             }, { merge: true });
             
-            console.log(`Stored tokens in Firestore for user: ${userId} (${userProfile.email})`);
+            console.log(`Stored tokens in Firestore for Firebase user: ${userId} (APS: ${userProfile.email})`);
         } catch (firestoreError) {
             console.error('Failed to store tokens in Firestore:', firestoreError);
             // Continue even if Firestore storage fails
@@ -83,7 +116,7 @@ router.get('/callback', async (req, res) => {
         res.redirect(`/?session=${sessionId}&success=true`);
     } catch (error) {
         console.error('OAuth callback error:', error);
-        res.redirect('/?error=auth_failed');
+        res.redirect('/?error=auth_failed&message=' + encodeURIComponent(error.message));
     }
 });
 
