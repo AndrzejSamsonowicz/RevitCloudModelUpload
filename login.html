@@ -528,51 +528,34 @@
         
         // Resend Verification Email
         async function resendVerificationEmail() {
-            if (!pendingVerificationEmail) {
-                showAlert('Please try logging in again first.', 'error');
-                return;
-            }
-            
             try {
-                // Re-authenticate to get fresh user object
                 const email = document.getElementById('email').value.trim();
-                const password = document.getElementById('password').value;
                 
-                if (!email || !password) {
-                    showAlert('Please enter your email and password first.', 'error');
+                if (!email) {
+                    showAlert('Please enter your email address first.', 'error');
                     return;
                 }
                 
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const user = userCredential.user;
+                // Call backend API to resend verification
+                const response = await fetch(`${serverURL}/api/auth/resend-verification`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
                 
-                // Send verification email
-                await user.sendEmailVerification();
+                const result = await response.json();
                 
-                // Sign out immediately
-                await auth.signOut();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to resend verification email');
+                }
                 
                 // Show success message
                 document.getElementById('emailNotVerified').style.display = 'none';
-                showAlert('Verification email sent! Please check your inbox and click the verification link.', 'success');
+                showAlert('Verification email sent! Please check your inbox (including spam folder).', 'success');
                 
             } catch (error) {
                 console.error('Resend verification error:', error);
-                
-                let errorMessage = 'Failed to resend verification email.';
-                switch (error.code) {
-                    case 'auth/too-many-requests':
-                        errorMessage = 'Too many requests. Please try again in a few minutes.';
-                        break;
-                    case 'auth/user-not-found':
-                        errorMessage = 'Account not found. Please sign up first.';
-                        break;
-                    case 'auth/wrong-password':
-                        errorMessage = 'Incorrect password. Please enter the correct password.';
-                        break;
-                }
-                
-                showAlert(errorMessage, 'error');
+                showAlert(error.message || 'Failed to resend verification email. Please try again.', 'error');
             }
         }
         

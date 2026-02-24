@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - Revit Cloud Model Publisher</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Artifact+Elements:wght@400;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Artifact Elements', Arial, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0696D7 0%, #0057A0 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .verification-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 500px;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .logo-section h1 {
+            color: #0696D7;
+            font-size: 28px;
+            margin-bottom: 30px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0696D7;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .message {
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .message.processing {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #0696D7;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 16px;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #0057A0;
+        }
+        
+        .btn.secondary {
+            background: #6c757d;
+        }
+        
+        .btn.secondary:hover {
+            background: #545b62;
+        }
+    </style>
+</head>
+<body>
+    <div class="verification-container">
+        <div class="logo-section">
+            <h1>Email Verification</h1>
+        </div>
+        
+        <div id="status">
+            <div class="spinner"></div>
+            <div class="message processing">
+                <p>Verifying your email address...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        if (!token) {
+            showError('Invalid verification link. Please check your email and try again.');
+        } else {
+            verifyEmail(token);
+        }
+        
+        async function verifyEmail(token) {
+            try {
+                const response = await fetch(`/api/auth/verify-email?token=${token}`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showSuccess(data.message, data.email);
+                } else {
+                    showError(data.error || 'Verification failed');
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                showError('An error occurred during verification. Please try again.');
+            }
+        }
+        
+        function showSuccess(message, email) {
+            document.getElementById('status').innerHTML = `
+                <div class="icon">✅</div>
+                <div class="message success">
+                    <h2>Email Verified!</h2>
+                    <p>${message}</p>
+                    ${email ? `<p style="margin-top: 10px;"><strong>${email}</strong></p>` : ''}
+                </div>
+                <a href="/login" class="btn">Go to Login</a>
+            `;
+        }
+        
+        function showError(message) {
+            document.getElementById('status').innerHTML = `
+                <div class="icon">❌</div>
+                <div class="message error">
+                    <h2>Verification Failed</h2>
+                    <p>${message}</p>
+                </div>
+                <a href="/register.html" class="btn secondary">Back to Registration</a>
+                <a href="/login" class="btn" style="margin-left: 10px;">Go to Login</a>
+            `;
+        }
+    </script>
+</body>
+</html>

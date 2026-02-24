@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+const emailService = require('../services/emailService');
 
 // Helper functions to access Firebase services (initialized in server.js)
 const getDb = () => admin.firestore();
@@ -67,6 +68,187 @@ async function verifyFirebaseToken(req, res, next) {
         return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 }
+
+/**
+ * POST /api/auth/register
+ * Register a new user with custom email verification
+ */
+router.post('/register', async (req, res) => {
+    try {
+        const { email, password, licenseKey } = req.body;
+        
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+        
+        // Validate password strength
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+        
+        // Create Firebase user (emailVerified will be false initially)
+        const userRecord = await getAuth().createUser({
+            email: email,
+            password: password,
+            emailVerified: false
+        });
+        
+        // Generate verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        
+        // Create user document in Firestore
+        await getDb().collection('users').doc(userRecord.uid).set({
+            email: email,
+            licenseKey: licenseKey || null,
+            licenseExpiry: null,
+            licenseStatus: 'pending',
+            emailVerified: false,
+            verificationToken: verificationToken,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastLogin: null,
+            encryptedClientId: '',
+            encryptedClientSecret: '',
+            encryptionIV: ''
+        });
+        
+        // Send verification email
+        try {
+            await emailService.sendVerificationEmail(email, verificationToken);
+            console.log(`Verification email sent to: ${email}`);
+        } catch (emailError) {
+            console.error('Failed to send verification email:', emailError);
+            // Don't fail registration if email fails - admin can manually verify
+        }
+        
+        res.json({ 
+            success: true, 
+            message: 'Registration successful! Please check your email to verify your account.',
+            userId: userRecord.uid
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        
+        if (error.code === 'auth/email-already-exists') {
+            return res.status(400).json({ error: 'Email already registered' });
+        }
+        
+        res.status(500).json({ error: error.message || 'Registration failed' });
+    }
+});
+
+/**
+ * GET /api/auth/verify-email
+ * Verify email using token from verification email
+ */
+router.get('/verify-email', async (req, res) => {
+    try {
+        const { token } = req.query;
+        
+        if (!token) {
+            return res.status(400).json({ error: 'Verification token is required' });
+        }
+        
+        // Find user with this verification token
+        const usersSnapshot = await getDb().collection('users')
+            .where('verificationToken', '==', token)
+            .limit(1)
+            .get();
+        
+        if (usersSnapshot.empty) {
+            return res.status(400).json({ error: 'Invalid or expired verification token' });
+        }
+        
+        const userDoc = usersSnapshot.docs[0];
+        const userId = userDoc.id;
+        const userData = userDoc.data();
+        
+        // Check if already verified
+        if (userData.emailVerified) {
+            return res.status(400).json({ error: 'Email already verified' });
+        }
+        
+        // Update Firebase Auth user
+        await getAuth().updateUser(userId, {
+            emailVerified: true
+        });
+        
+        // Update Firestore user document
+        await getDb().collection('users').doc(userId).update({
+            emailVerified: true,
+            verificationToken: admin.firestore.FieldValue.delete(),
+            verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        
+        console.log(`Email verified for user: ${userId} (${userData.email})`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Email verified successfully! You can now log in.',
+            email: userData.email
+        });
+    } catch (error) {
+        console.error('Email verification error:', error);
+        res.status(500).json({ error: 'Email verification failed' });
+    }
+});
+
+/**
+ * POST /api/auth/resend-verification
+ * Resend verification email
+ */
+router.post('/resend-verification', async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        
+        // Find user by email
+        const userRecord = await getAuth().getUserByEmail(email);
+        
+        // Check if already verified
+        if (userRecord.emailVerified) {
+            return res.status(400).json({ error: 'Email already verified' });
+        }
+        
+        // Get user document
+        const userDoc = await getDb().collection('users').doc(userRecord.uid).get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const userData = userDoc.data();
+        
+        // Generate new verification token
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        
+        // Update token in Firestore
+        await getDb().collection('users').doc(userRecord.uid).update({
+            verificationToken: verificationToken,
+            verificationResent: admin.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Send verification email
+        await emailService.sendVerificationEmail(email, verificationToken);
+        
+        console.log(`Verification email resent to: ${email}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Verification email sent! Please check your inbox.'
+        });
+    } catch (error) {
+        console.error('Resend verification error:', error);
+        
+        if (error.code === 'auth/user-not-found') {
+            return res.status(404).json({ error: 'No account found with this email' });
+        }
+        
+        res.status(500).json({ error: 'Failed to resend verification email' });
+    }
+});
 
 /**
  * GET /api/auth/verify
