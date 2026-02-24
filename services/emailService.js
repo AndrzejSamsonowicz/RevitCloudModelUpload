@@ -74,7 +74,7 @@ class EmailService {
      * Send email verification link
      */
     async sendVerificationEmail(email, token) {
-        const verificationUrl = `${this.appUrl}/verify-email?token=${token}`;
+        const verificationUrl = `${this.appUrl}/verify-email.html?token=${token}`;
         
         const mailOptions = {
             from: this.fromEmail,

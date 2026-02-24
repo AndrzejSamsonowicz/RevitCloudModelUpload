@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Email Verification - Debug Tool</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Artifact+Elements:wght@400;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Artifact Elements', Arial, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0696D7 0%, #0057A0 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #0696D7;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .section h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        
+        input[type="text"], input[type="email"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #0696D7;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #0057A0;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .result.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        
+        .token-link {
+            word-break: break-all;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Email Verification Debug Tool</h1>
+        <p style="color: #6c757d; margin-bottom: 30px;">This page helps test and debug the email verification system.</p>
+        
+        <div class="section">
+            <h2>1. Test Email Service</h2>
+            <p style="margin-bottom: 15px;">Check if email service is configured correctly.</p>
+            <input type="email" id="testEmail" placeholder="Enter email to test" />
+            <button onclick="testEmailService()">Send Test Verification Email</button>
+            <div id="testResult" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>2. Manual Verification (Admin)</h2>
+            <p style="margin-bottom: 15px;">Verify a user's email if automated emails fail.</p>
+            <input type="text" id="verifyToken" placeholder="Enter verification token" />
+            <button onclick="verifyToken()">Verify Email with Token</button>
+            <div id="verifyResult" class="result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>3. Check User Status</h2>
+            <p style="margin-bottom: 15px;">Check if a user's email is verified.</p>
+            <input type="email" id="checkEmail" placeholder="Enter email to check" />
+            <button onclick="checkUserStatus()">Check Status</button>
+            <div id="checkResult" class="result"></div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+            <h3 style="color: #856404; margin-bottom: 10px;">⚠️ Development Mode</h3>
+            <p style="color: #856404; font-size: 14px; line-height: 1.6;">
+                If email service is not configured, verification links will be logged to the server console. 
+                Check server logs or use the manual verification tool above.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        async function testEmailService() {
+            const email = document.getElementById('testEmail').value.trim();
+            const result = document.getElementById('testResult');
+            
+            if (!email) {
+                showResult(result, 'Please enter an email address', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/auth/resend-verification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let message = data.message;
+                    if (data.verificationToken) {
+                        message += `<div class="token-link"><strong>Verification Token (for manual verification):</strong><br>${data.verificationToken}</div>`;
+                        message += `<div class="token-link"><strong>Verification Link:</strong><br><a href="/verify-email.html?token=${data.verificationToken}" target="_blank">${window.location.origin}/verify-email.html?token=${data.verificationToken}</a></div>`;
+                    }
+                    showResult(result, message, data.emailSent ? 'success' : 'info');
+                } else {
+                    showResult(result, data.error || 'Failed to send email', 'error');
+                }
+            } catch (error) {
+                showResult(result, 'Error: ' + error.message, 'error');
+            }
+        }
+        
+        async function verifyToken() {
+            const token = document.getElementById('verifyToken').value.trim();
+            const result = document.getElementById('verifyResult');
+            
+            if (!token) {
+                showResult(result, 'Please enter a verification token', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/auth/verify-email?token=${token}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(result, `✅ ${data.message} (${data.email})`, 'success');
+                } else {
+                    showResult(result, data.error || 'Verification failed', 'error');
+                }
+            } catch (error) {
+                showResult(result, 'Error: ' + error.message, 'error');
+            }
+        }
+        
+        async function checkUserStatus() {
+            const email = document.getElementById('checkEmail').value.trim();
+            const result = document.getElementById('checkResult');
+            
+            if (!email) {
+                showResult(result, 'Please enter an email address', 'error');
+                return;
+            }
+            
+            showResult(result, 'This feature requires Firebase Admin SDK on backend. Check server logs for user status.', 'info');
+        }
+        
+        function showResult(element, message, type) {
+            element.innerHTML = message;
+            element.className = `result ${type}`;
+            element.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

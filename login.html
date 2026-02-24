@@ -311,6 +311,9 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
         
+        // Server URL
+        const serverURL = window.location.origin;
+        
         // Rate limiting (more user-friendly settings)
         let loginAttempts = parseInt(localStorage.getItem('loginAttempts') || '0');
         const MAX_LOGIN_ATTEMPTS = 10; // Increased from 5 to 10

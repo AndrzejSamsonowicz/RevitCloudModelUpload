@@ -112,18 +112,28 @@ router.post('/register', async (req, res) => {
         });
         
         // Send verification email
+        let emailSent = false;
+        let emailError = null;
         try {
             await emailService.sendVerificationEmail(email, verificationToken);
-            console.log(`Verification email sent to: ${email}`);
-        } catch (emailError) {
-            console.error('Failed to send verification email:', emailError);
+            console.log(`✅ Verification email sent to: ${email}`);
+            emailSent = true;
+        } catch (error) {
+            console.error('❌ Failed to send verification email:', error);
+            emailError = error.message;
             // Don't fail registration if email fails - admin can manually verify
         }
         
+        const message = emailSent 
+            ? 'Registration successful! Please check your email to verify your account.'
+            : 'Registration successful! However, email could not be sent. Please contact admin for manual verification.';
+        
         res.json({ 
             success: true, 
-            message: 'Registration successful! Please check your email to verify your account.',
-            userId: userRecord.uid
+            message: message,
+            userId: userRecord.uid,
+            emailSent: emailSent,
+            verificationToken: !emailSent ? verificationToken : undefined // Only return token if email failed (for debugging)
         });
     } catch (error) {
         console.error('Registration error:', error);
@@ -231,13 +241,24 @@ router.post('/resend-verification', async (req, res) => {
         });
         
         // Send verification email
-        await emailService.sendVerificationEmail(email, verificationToken);
+        let emailSent = false;
+        try {
+            await emailService.sendVerificationEmail(email, verificationToken);
+            console.log(`✅ Verification email resent to: ${email}`);
+            emailSent = true;
+        } catch (emailError) {
+            console.error('❌ Failed to resend verification email:', emailError);
+        }
         
-        console.log(`Verification email resent to: ${email}`);
+        const message = emailSent
+            ? 'Verification email sent! Please check your inbox.'
+            : 'Token generated but email could not be sent. Please contact admin or check server logs.';
         
         res.json({ 
             success: true, 
-            message: 'Verification email sent! Please check your inbox.'
+            message: message,
+            emailSent: emailSent,
+            verificationToken: !emailSent ? verificationToken : undefined // Only return token if email failed (for debugging)
         });
     } catch (error) {
         console.error('Resend verification error:', error);
