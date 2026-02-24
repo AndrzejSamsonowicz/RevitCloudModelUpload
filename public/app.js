@@ -119,36 +119,56 @@ function hideLoadingModal() {
 }
 
 // Check for session on page load
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
-    sessionId = params.get('session');
+    
+    // Check Firebase authentication first
+    if (typeof firebase !== 'undefined' && firebase.auth()) {
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (user && user.emailVerified) {
+                // User is authenticated with Firebase
+                console.log('Firebase user authenticated:', user.email);
+                userId = user.uid;
+                
+                // Check for Autodesk OAuth session
+                sessionId = params.get('session');
+                if (!sessionId) {
+                    sessionId = sessionStorage.getItem('aps_session');
+                }
 
-    // If no session in URL, check if we have a stored session
-    if (!sessionId) {
-        sessionId = sessionStorage.getItem('aps_session');
-    }
-
-    if (sessionId) {
-        // Store session for persistence across page reloads
-        sessionStorage.setItem('aps_session', sessionId);
-        
-        checkSession().then((isAuthenticated) => {
-            if (!isAuthenticated) {
-                // Session is invalid, redirect to login
-                sessionStorage.removeItem('aps_session');
-                window.location.href = '/login';
+                if (sessionId) {
+                    // Store session for persistence
+                    sessionStorage.setItem('aps_session', sessionId);
+                    
+                    const isAuthenticated = await checkSession();
+                    if (isAuthenticated) {
+                        // Both Firebase and Autodesk OAuth authenticated
+                        document.body.style.visibility = 'visible';
+                        updateAuthUI(true);
+                        await autoUploadAppBundle();
+                    } else {
+                        // Firebase authenticated but OAuth session invalid
+                        sessionStorage.removeItem('aps_session');
+                        document.body.style.visibility = 'visible';
+                        updateAuthUI(true);
+                    }
+                    // Clean URL
+                    window.history.replaceState({}, document.title, '/');
+                } else {
+                    // Firebase authenticated but no OAuth session
+                    // Show app and let user authenticate with Autodesk when needed
+                    document.body.style.visibility = 'visible';
+                    updateAuthUI(true);
+                }
             } else {
-                // Show the page after successful authentication
-                document.body.style.visibility = 'visible';
-                // Auto-upload AppBundle after successful authentication
-                autoUploadAppBundle();
+                // Not authenticated with Firebase, redirect to login
+                console.log('No Firebase authentication, redirecting to login...');
+                window.location.href = '/login';
             }
         });
-        // Clean URL
-        window.history.replaceState({}, document.title, '/');
     } else {
-        // No session available, redirect to login
-        console.log('No active session found, redirecting to login...');
+        // Firebase not available, redirect to login
+        console.warn('Firebase not initialized');
         window.location.href = '/login';
     }
 
