@@ -907,8 +907,7 @@
                     <thead>
                         <tr>
                             <th style="width: 40px;"><input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this.checked)"></th>
-                            <th>Email (Firebase Login)</th>
-                            <th>APS Email</th>
+                            <th>Email</th>
                             <th>License Key</th>
                             <th>Status</th>
                             <th>Expiry</th>
@@ -925,14 +924,11 @@
                 const isExpired = expiryDate && expiryDate < new Date();
                 const statusClass = user.emailVerified ? 'badge-active' : 'badge-pending';
                 const statusText = user.emailVerified ? 'Verified' : 'Unverified';
-                const apsEmail = user.apsEmail || 'Not connected';
-                const apsEmailStyle = user.apsEmail ? '' : 'color: #999; font-style: italic;';
                 
                 html += `
                     <tr>
                         <td><input type="checkbox" class="user-checkbox" data-user-id="${user.userId}" data-user-email="${user.email}" onchange="updateDeleteButton()"></td>
                         <td><strong>${user.email}</strong></td>
-                        <td style="${apsEmailStyle}">${apsEmail}</td>
                         <td><code>${user.licenseKey || 'N/A'}</code></td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
                         <td>${expiryDate ? formatDate(expiryDate) : 'N/A'} ${isExpired ? '<span class="badge badge-expired">Expired</span>' : ''}</td>
