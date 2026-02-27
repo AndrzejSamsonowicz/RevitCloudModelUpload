@@ -381,7 +381,8 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
-        const usersSnapshot = await getDb().collection('users').orderBy('createdAt', 'desc').get();
+        // Don't use orderBy to avoid Firestore requirement that ALL docs must have the field
+        const usersSnapshot = await getDb().collection('users').get();
         
         const users = [];
         usersSnapshot.forEach(doc => {
@@ -396,6 +397,14 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
                 createdAt: data.createdAt?.toDate().toISOString() || null,
                 lastLogin: data.lastLogin?.toDate().toISOString() || null
             });
+        });
+        
+        // Sort in memory instead to handle missing createdAt fields
+        users.sort((a, b) => {
+            if (!a.createdAt && !b.createdAt) return 0;
+            if (!a.createdAt) return 1;
+            if (!b.createdAt) return -1;
+            return new Date(b.createdAt) - new Date(a.createdAt);
         });
         
         res.json({
