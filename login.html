@@ -501,23 +501,39 @@
             resetBtn.innerHTML = 'Sending... <span class="loading-spinner"></span>';
             
             try {
-                // Configure action URL to redirect to our custom reset page
-                await auth.sendPasswordResetEmail(email);
-                showModalAlert('Password reset email sent! Check your inbox.', 'success');
+                // Use custom backend endpoint for password reset
+                const response = await fetch(`${serverURL}/api/auth/forgot-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
                 
-                setTimeout(() => {
-                    closeResetModal();
-                }, 3000);
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    showModalAlert(result.message, 'success');
+                    
+                    // If email failed but token was returned, show it (dev mode)
+                    if (!result.emailSent && result.resetToken) {
+                        console.log('Password reset token (dev mode):', result.resetToken);
+                        console.log(`Reset URL: ${window.location.origin}/reset-password.html?token=${result.resetToken}`);
+                    }
+                    
+                    setTimeout(() => {
+                        closeResetModal();
+                    }, 3000);
+                } else {
+                    throw new Error(result.error || 'Failed to send reset email');
+                }
                 
             } catch (error) {
                 console.error('Password reset error:', error);
-                
-                let errorMessage = 'Failed to send reset email.';
-                switch (error.code) {
-                    case 'auth/user-not-found':
-                        errorMessage = 'No account found with this email.';
-                        break;
-                    case 'auth/invalid-email':
+                showModalAlert(error.message || 'Failed to send reset email.', 'error');
+            } finally {
+                resetBtn.disabled = false;
+                resetBtn.innerHTML = 'Send Reset Link';
+            }
+        });
                         errorMessage = 'Invalid email address format.';
                         break;
                 }
