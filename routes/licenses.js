@@ -387,6 +387,22 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
         const users = [];
         usersSnapshot.forEach(doc => {
             const data = doc.data();
+            
+            // Handle both Timestamp objects and string dates
+            let createdAt = null;
+            if (data.createdAt) {
+                createdAt = typeof data.createdAt.toDate === 'function' 
+                    ? data.createdAt.toDate().toISOString() 
+                    : data.createdAt;
+            }
+            
+            let lastLogin = null;
+            if (data.lastLogin) {
+                lastLogin = typeof data.lastLogin.toDate === 'function'
+                    ? data.lastLogin.toDate().toISOString()
+                    : data.lastLogin;
+            }
+            
             users.push({
                 userId: doc.id,
                 email: data.email,
@@ -394,8 +410,8 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
                 licenseStatus: data.licenseStatus || 'none',
                 licenseExpiry: data.licenseExpiry || null,
                 isAdmin: data.isAdmin || false,
-                createdAt: data.createdAt?.toDate().toISOString() || null,
-                lastLogin: data.lastLogin?.toDate().toISOString() || null
+                createdAt,
+                lastLogin
             });
         });
         
