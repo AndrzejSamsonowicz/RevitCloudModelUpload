@@ -534,16 +534,6 @@
                 resetBtn.innerHTML = 'Send Reset Link';
             }
         });
-                        errorMessage = 'Invalid email address format.';
-                        break;
-                }
-                
-                showModalAlert(errorMessage, 'error');
-            } finally {
-                resetBtn.disabled = false;
-                resetBtn.innerHTML = 'Send Reset Link';
-            }
-        });
         
         // Resend Verification Email
         async function resendVerificationEmail() {
