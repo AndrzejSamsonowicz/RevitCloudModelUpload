@@ -379,7 +379,11 @@
                 const user = userCredential.user;
                 
                 // Step 3: Send email verification (Firebase native - no backend needed!)
-                await user.sendEmailVerification();
+                const actionCodeSettings = {
+                    url: `${window.location.origin}/login.html?verified=true`,
+                    handleCodeInApp: false
+                };
+                await user.sendEmailVerification(actionCodeSettings);
                 
                 // Step 4: Create user document in Firestore
                 await db.collection('users').doc(user.uid).set({
