@@ -100,9 +100,9 @@ router.get('/callback', async (req, res) => {
                 apsTokenExpiry: now + (tokenData.expiresIn * 1000),
                 sessionId: sessionId,
                 apsUserId: userProfile.userId,
-                email: userProfile.email,
-                firstName: userProfile.firstName,
-                lastName: userProfile.lastName,
+                apsEmail: userProfile.email, // Autodesk email (don't overwrite Firebase email!)
+                apsFirstName: userProfile.firstName,
+                apsLastName: userProfile.lastName,
                 lastLogin: now
             }, { merge: true });
             

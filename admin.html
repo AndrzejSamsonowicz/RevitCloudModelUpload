@@ -498,6 +498,7 @@
                         <button class="btn btn-warning" onclick="resetPasswordSelectedUser()" id="resetPasswordBtn" style="display: none;">🔑 Reset Password</button>
                         <button class="btn btn-success" onclick="verifySelectedUsers()" id="verifyUsersBtn" style="display: none;">✓ Verify Email</button>
                         <button class="btn btn-danger" onclick="deleteSelectedUsers()" id="deleteUsersBtn" style="display: none;">🗑️ Delete Selected</button>
+                        <button class="btn btn-warning" onclick="fixUserEmails()" title="Restore Firebase emails from Auth (fixes Autodesk email overwrite)">🔧 Fix Email Mismatch</button>
                         <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
                     </div>
                 </div>
@@ -906,7 +907,8 @@
                     <thead>
                         <tr>
                             <th style="width: 40px;"><input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this.checked)"></th>
-                            <th>Email</th>
+                            <th>Email (Firebase Login)</th>
+                            <th>APS Email</th>
                             <th>License Key</th>
                             <th>Status</th>
                             <th>Expiry</th>
@@ -923,11 +925,14 @@
                 const isExpired = expiryDate && expiryDate < new Date();
                 const statusClass = user.emailVerified ? 'badge-active' : 'badge-pending';
                 const statusText = user.emailVerified ? 'Verified' : 'Unverified';
+                const apsEmail = user.apsEmail || 'Not connected';
+                const apsEmailStyle = user.apsEmail ? '' : 'color: #999; font-style: italic;';
                 
                 html += `
                     <tr>
                         <td><input type="checkbox" class="user-checkbox" data-user-id="${user.userId}" data-user-email="${user.email}" onchange="updateDeleteButton()"></td>
-                        <td>${user.email}</td>
+                        <td><strong>${user.email}</strong></td>
+                        <td style="${apsEmailStyle}">${apsEmail}</td>
                         <td><code>${user.licenseKey || 'N/A'}</code></td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
                         <td>${expiryDate ? formatDate(expiryDate) : 'N/A'} ${isExpired ? '<span class="badge badge-expired">Expired</span>' : ''}</td>
@@ -1706,6 +1711,48 @@
                 document.getElementById('deletingProgress').classList.remove('active');
                 document.getElementById('deleteCancelBtn').disabled = false;
                 document.getElementById('deleteConfirmBtn').disabled = false;
+            }
+        }
+        
+        // Fix user emails (restore Firebase emails from Auth)
+        async function fixUserEmails() {
+            if (!confirm('This will restore Firebase login emails from Firebase Auth to Firestore. Continue?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${serverURL}/api/admin/fix-user-emails`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    let message = `✅ Email Fix Complete!\n\n`;
+                    message += `Total Users: ${result.summary.total}\n`;
+                    message += `Fixed: ${result.summary.fixed}\n`;
+                    message += `Skipped (already correct): ${result.summary.skipped}\n`;
+                    message += `Errors: ${result.summary.errors}\n\n`;
+                    
+                    if (result.summary.fixed > 0) {
+                        message += `Details:\n`;
+                        result.results.filter(r => r.status === 'fixed').forEach(r => {
+                            message += `• ${r.message}\n`;
+                        });
+                    }
+                    
+                    alert(message);
+                    await refreshData();
+                } else {
+                    alert('❌ Failed to fix emails: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Fix emails error:', error);
+                alert('❌ Error: ' + error.message);
             }
         }
         

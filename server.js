@@ -10,6 +10,7 @@ const webhookRoutes = require('./routes/webhooks');
 const dataManagementRoutes = require('./routes/dataManagement');
 const { router: firebaseAuthRoutes } = require('./routes/firebaseAuth');
 const licenseRoutes = require('./routes/licenses');
+const adminToolsRoutes = require('./routes/adminTools');
 
 // Initialize Firebase Admin SDK
 try {
@@ -55,6 +56,7 @@ app.use('/oauth', authRoutes);
 app.use('/api/design-automation', designAutomationRoutes);
 app.use('/api/data-management', dataManagementRoutes);
 app.use('/api/auth', firebaseAuthRoutes);
+app.use('/api/admin', adminToolsRoutes);
 app.use('/api', licenseRoutes);
 app.use('/webhooks', webhookRoutes);
 
