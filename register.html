@@ -374,24 +374,28 @@
                 }
                 */
                 
-                // Step 2: Register user via backend API (with custom email verification)
-                const response = await fetch(`${serverURL}/api/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email: email,
-                        password: password,
-                        licenseKey: licenseKey || null
-                    })
+                // Step 2: Create Firebase user (native Firebase registration)
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Step 3: Send email verification (Firebase native - no backend needed!)
+                await user.sendEmailVerification();
+                
+                // Step 4: Create user document in Firestore
+                await db.collection('users').doc(user.uid).set({
+                    email: email,
+                    licenseKey: licenseKey || null,
+                    licenseExpiry: null,
+                    licenseStatus: 'pending',
+                    emailVerified: false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: null,
+                    encryptedClientId: '',
+                    encryptedClientSecret: '',
+                    encryptionIV: ''
                 });
                 
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.error || 'Registration failed');
-                }
-                
-                // Step 3: Log analytics (non-blocking - don't fail registration if this fails)
+                // Step 5: Log analytics (non-blocking - don't fail registration if this fails)
                 try {
                     await db.collection('analytics').add({
                         action: 'registration',
@@ -406,7 +410,7 @@
                     console.log('Analytics logging failed (non-critical):', analyticsError);
                 }
                 
-                const successMessage = '✅ Account created successfully! Check your email (including spam folder) to verify your account. Redirecting to login...';
+                const successMessage = '✅ Account created successfully! Please check your email to verify your account. Redirecting to login...';
                 showAlert(successMessage, 'success');
                 
                 // Disable form
