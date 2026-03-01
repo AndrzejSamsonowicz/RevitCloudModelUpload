@@ -534,6 +534,10 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
  * Retrieve decrypted APS credentials for authenticated user
  */
 router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
+    console.log('[Credentials GET] Route handler called!');
+    console.log('[Credentials GET] req.userId:', req.userId);
+    console.log('[Credentials GET] req.user:', req.user);
+    
     try {
         console.log(`[Credentials] Loading credentials for user: ${req.userId}`);
         
