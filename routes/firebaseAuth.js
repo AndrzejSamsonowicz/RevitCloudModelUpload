@@ -484,7 +484,10 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
     try {
         const { clientId, clientSecret } = req.body;
         
+        console.log(`[Credentials] Saving credentials for user: ${req.userId}`);
+        
         if (!clientId || !clientSecret) {
+            console.log('[Credentials] Missing required fields');
             return res.status(400).json({ error: 'Missing required fields' });
         }
         
@@ -503,6 +506,8 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
         let encryptedClientSecret = cipherClientSecret.update(clientSecret, 'utf8', 'hex');
         encryptedClientSecret += cipherClientSecret.final('hex');
         
+        console.log(`[Credentials] Saving encrypted credentials to Firestore for user: ${req.userId}`);
+        
         await getDb().collection('users').doc(req.userId).set({
             encryptedClientId,
             encryptedClientSecret,
@@ -510,10 +515,12 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
             credentialsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         
+        console.log(`[Credentials] Successfully saved credentials for user: ${req.userId}`);
+        
         res.json({ success: true, message: 'Credentials stored successfully' });
     } catch (error) {
-        console.error('Store credentials error:', error);
-        res.status(500).json({ error: 'Failed to store credentials' });
+        console.error('[Credentials] Store credentials error:', error);
+        res.status(500).json({ error: 'Failed to store credentials', details: error.message });
     }
 });
 

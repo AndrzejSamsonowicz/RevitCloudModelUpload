@@ -106,8 +106,21 @@ async function saveCredentials() {
     messageDiv.style.color = '#1976d2';
     
     try {
+        // Check if user is authenticated
         const user = firebase.auth().currentUser;
+        if (!user) {
+            throw new Error('You must be logged in to save credentials. Please login first.');
+        }
+        
+        console.log('Saving credentials for user:', user.uid);
+        
+        // Check if email is verified
+        if (!user.emailVerified) {
+            throw new Error('Please verify your email before saving credentials.');
+        }
+        
         const token = await user.getIdToken();
+        console.log('Got ID token, making request...');
         
         const response = await fetch('/api/auth/user/credentials', {
             method: 'PUT',
@@ -118,10 +131,16 @@ async function saveCredentials() {
             body: JSON.stringify({ clientId, clientSecret })
         });
         
+        console.log('Response status:', response.status);
+        
         if (!response.ok) {
             const error = await response.json();
+            console.error('Server error:', error);
             throw new Error(error.error || 'Failed to save credentials');
         }
+        
+        const result = await response.json();
+        console.log('Credentials saved successfully:', result);
         
         messageDiv.textContent = 'Credentials saved successfully!';
         messageDiv.style.backgroundColor = '#e8f5e9';
