@@ -443,45 +443,6 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
 });
 
 /**
- * GET /api/auth/user/:userId
- * Get user data by user ID (admin only)
- */
-router.get('/user/:userId', verifyFirebaseToken, async (req, res) => {
-    try {
-        // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
-            return res.status(403).json({ error: 'Forbidden: Admin access required' });
-        }
-        
-        const userDoc = await getDb().collection('users').doc(req.params.userId).get();
-        
-        if (!userDoc.exists) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const userData = userDoc.data();
-        
-        res.json({
-            success: true,
-            user: {
-                uid: req.params.userId,
-                email: userData.email,
-                licenseKey: userData.licenseKey,
-                licenseStatus: userData.licenseStatus,
-                licenseExpiry: userData.licenseExpiry,
-                isAdmin: userData.isAdmin || false,
-                createdAt: userData.createdAt,
-                lastLogin: userData.lastLogin
-            }
-        });
-    } catch (error) {
-        console.error('Get user error:', error);
-        res.status(500).json({ error: 'Failed to get user data' });
-    }
-});
-
-/**
  * PUT /api/auth/user/credentials
  * Store APS credentials for authenticated user (server-side encryption)
  */
@@ -595,6 +556,45 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
     } catch (error) {
         console.error('[Credentials] Get credentials error:', error);
         res.status(500).json({ error: 'Failed to retrieve credentials', details: error.message });
+    }
+});
+
+/**
+ * GET /api/auth/user/:userId
+ * Get user data by user ID (admin only)
+ */
+router.get('/user/:userId', verifyFirebaseToken, async (req, res) => {
+    try {
+        // Check if requester is admin
+        const adminDoc = await getDb().collection('users').doc(req.userId).get();
+        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+            return res.status(403).json({ error: 'Forbidden: Admin access required' });
+        }
+        
+        const userDoc = await getDb().collection('users').doc(req.params.userId).get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const userData = userDoc.data();
+        
+        res.json({
+            success: true,
+            user: {
+                uid: req.params.userId,
+                email: userData.email,
+                licenseKey: userData.licenseKey,
+                licenseStatus: userData.licenseStatus,
+                licenseExpiry: userData.licenseExpiry,
+                isAdmin: userData.isAdmin || false,
+                createdAt: userData.createdAt,
+                lastLogin: userData.lastLogin
+            }
+        });
+    } catch (error) {
+        console.error('Get user error:', error);
+        res.status(500).json({ error: 'Failed to get user data' });
     }
 });
 
