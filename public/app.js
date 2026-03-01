@@ -36,26 +36,36 @@ function updateTimeSinceCells() {
 async function loadCredentialsFromFirestore() {
     try {
         const user = firebase.auth().currentUser;
-        if (!user) return { clientId: '', clientSecret: '' };
+        if (!user) {
+            console.log('[Credentials] No user logged in');
+            return { clientId: '', clientSecret: '' };
+        }
+        
+        console.log('[Credentials] Loading credentials for user:', user.uid);
         
         const token = await user.getIdToken();
         const response = await fetch('/api/auth/user/credentials', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
+        console.log('[Credentials] Load response status:', response.status);
+        
         if (!response.ok) {
-            console.error('Failed to load credentials from Firestore');
+            console.error('[Credentials] Failed to load credentials from Firestore');
             return { clientId: '', clientSecret: '' };
         }
         
         const data = await response.json();
+        console.log('[Credentials] Loaded data:', data);
+        console.log('[Credentials] ClientId length:', data.credentials?.clientId?.length || 0);
+        console.log('[Credentials] ClientSecret length:', data.credentials?.clientSecret?.length || 0);
         
         return {
             clientId: data.credentials.clientId || '',
             clientSecret: data.credentials.clientSecret || ''
         };
     } catch (error) {
-        console.error('Load credentials error:', error);
+        console.error('[Credentials] Load credentials error:', error);
         return { clientId: '', clientSecret: '' };
     }
 }

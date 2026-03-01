@@ -530,15 +530,23 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
  */
 router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
     try {
+        console.log(`[Credentials] Loading credentials for user: ${req.userId}`);
+        
         const userDoc = await getDb().collection('users').doc(req.userId).get();
         
         if (!userDoc.exists) {
+            console.log(`[Credentials] User not found: ${req.userId}`);
             return res.status(404).json({ error: 'User not found' });
         }
         
         const userData = userDoc.data();
+        console.log(`[Credentials] User data keys:`, Object.keys(userData));
+        console.log(`[Credentials] Has encryptedClientId: ${!!userData.encryptedClientId}`);
+        console.log(`[Credentials] Has encryptedClientSecret: ${!!userData.encryptedClientSecret}`);
+        console.log(`[Credentials] Has encryptionIV: ${!!userData.encryptionIV}`);
         
         if (!userData.encryptedClientId || !userData.encryptedClientSecret) {
+            console.log('[Credentials] No credentials stored yet');
             return res.json({
                 success: true,
                 credentials: {
@@ -554,6 +562,8 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
         const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
         const iv = Buffer.from(userData.encryptionIV, 'hex');
         
+        console.log('[Credentials] Decrypting credentials...');
+        
         const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
         const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
         
@@ -563,6 +573,9 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
         let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
         clientSecret += decipherClientSecret.final('utf8');
         
+        console.log(`[Credentials] Decrypted clientId length: ${clientId.length}`);
+        console.log(`[Credentials] Decrypted clientSecret length: ${clientSecret.length}`);
+        
         res.json({
             success: true,
             credentials: {
@@ -571,8 +584,8 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Get credentials error:', error);
-        res.status(500).json({ error: 'Failed to retrieve credentials' });
+        console.error('[Credentials] Get credentials error:', error);
+        res.status(500).json({ error: 'Failed to retrieve credentials', details: error.message });
     }
 });
 
