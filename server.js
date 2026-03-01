@@ -51,6 +51,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Log all incoming requests
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
+
 // API Routes
 app.use('/oauth', authRoutes);
 app.use('/api/design-automation', designAutomationRoutes);
