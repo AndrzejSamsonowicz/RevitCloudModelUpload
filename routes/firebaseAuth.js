@@ -50,21 +50,26 @@ async function decryptUserCredentials(userId) {
  * Protects routes that require authentication
  */
 async function verifyFirebaseToken(req, res, next) {
+    console.log(`[Auth Middleware] Verifying token for: ${req.method} ${req.path}`);
+    
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('[Auth Middleware] No authorization header or invalid format');
         return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
     
     const idToken = authHeader.split('Bearer ')[1];
+    console.log('[Auth Middleware] Token received, verifying...');
     
     try {
         const decodedToken = await getAuth().verifyIdToken(idToken);
         req.user = decodedToken;
         req.userId = decodedToken.uid;
+        console.log(`[Auth Middleware] Token verified successfully for user: ${req.userId}`);
         next();
     } catch (error) {
-        console.error('Token verification error:', error);
+        console.error('[Auth Middleware] Token verification error:', error.message);
         return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 }
