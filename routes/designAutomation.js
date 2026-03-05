@@ -224,13 +224,28 @@ router.post('/scheduled-publish', async (req, res, next) => {
     try {
         const { userId, fileId, fileName, projectId, projectGuid, modelGuid, region, engineVersion } = req.body;
         
+        console.log('[Scheduled Publish] Request received from Cloud Function');
+        console.log('[Scheduled Publish] Body:', { userId, fileId, fileName, projectId });
+        
         // Verify the request is from Cloud Functions
         const authHeader = req.headers['x-cloud-function-auth'];
         const expectedAuth = process.env.CLOUD_FUNCTION_AUTH_KEY || 'your-secret-key-here';
         
-        if (authHeader !== expectedAuth) {
-            return res.status(401).json({ error: 'Unauthorized' });
+        console.log('[Scheduled Publish] Auth header present:', !!authHeader);
+        console.log('[Scheduled Publish] Expected auth configured:', expectedAuth !== 'your-secret-key-here');
+        
+        if (!authHeader) {
+            console.error('[Scheduled Publish] No auth header provided');
+            return res.status(401).json({ error: 'Unauthorized: No auth header' });
         }
+        
+        if (authHeader !== expectedAuth) {
+            console.error('[Scheduled Publish] Auth header mismatch');
+            console.error('[Scheduled Publish] Expected key configured:', expectedAuth !== 'your-secret-key-here');
+            return res.status(401).json({ error: 'Unauthorized: Invalid auth key' });
+        }
+        
+        console.log('[Scheduled Publish] Authentication successful');
         
         if (!userId || !fileId || !projectGuid || !modelGuid) {
             return res.status(400).json({ 
