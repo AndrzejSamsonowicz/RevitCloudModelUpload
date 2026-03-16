@@ -81,6 +81,50 @@ async function verifyFirebaseToken(req, res, next) {
 }
 
 /**
+ * Verify Admin Access Middleware
+ * Protects routes that require admin privileges
+ */
+async function verifyAdminAccess(req, res, next) {
+    console.log(`[Admin Middleware] Verifying admin access for: ${req.method} ${req.path}`);
+    
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('[Admin Middleware] No authorization header');
+        return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    }
+    
+    const idToken = authHeader.split('Bearer ')[1];
+    
+    try {
+        const decodedToken = await getAuth().verifyIdToken(idToken);
+        req.user = decodedToken;
+        req.userId = decodedToken.uid;
+        
+        // Check if user is admin in Firestore
+        const userDoc = await getDb().collection('users').doc(req.userId).get();
+        
+        if (!userDoc.exists) {
+            console.log('[Admin Middleware] User document not found');
+            return res.status(403).json({ error: 'Forbidden: User not found' });
+        }
+        
+        const userData = userDoc.data();
+        
+        if (!userData.isAdmin) {
+            console.log(`[Admin Middleware] Access denied for user: ${req.userId}`);
+            return res.status(403).json({ error: 'Forbidden: Admin access required' });
+        }
+        
+        console.log(`[Admin Middleware] Admin access granted for user: ${req.userId}`);
+        next();
+    } catch (error) {
+        console.error('[Admin Middleware] Admin verification error:', error.message);
+        return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
+}
+
+/**
  * POST /api/auth/register
  * Register a new user with custom email verification
  */
@@ -621,4 +665,4 @@ router.post('/update-last-login', verifyFirebaseToken, async (req, res) => {
     }
 });
 
-module.exports = { router, verifyFirebaseToken, decryptUserCredentials };
+module.exports = { router, verifyFirebaseToken, verifyAdminAccess, decryptUserCredentials };
