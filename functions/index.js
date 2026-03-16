@@ -6,11 +6,11 @@ admin.initializeApp();
 const db = admin.firestore();
 
 /**
- * Scheduled Cloud Function that runs every 15 minutes
+ * Scheduled Cloud Function that runs every 5 minutes
  * Checks all users' publishing schedules and triggers publishing for matching files
  */
 exports.checkScheduledPublishing = functions.region('europe-west6').pubsub
-  .schedule('*/15 * * * *') // Run every 15 minutes
+  .schedule('*/5 * * * *') // Run every 5 minutes
   .timeZone('UTC') // Initial timezone, will be converted per schedule
   .onRun(async () => {
     console.log('Starting scheduled publishing check...');
@@ -106,18 +106,18 @@ function shouldPublishNow(schedule, now) {
       return false;
     }
     
-    // Check if current time matches schedule (within 15-minute window for Cloud Function execution)
-    // The function runs every 15 minutes, so if scheduled time is within current 15-min window, trigger it
+    // Check if current time matches schedule (within 5-minute window for Cloud Function execution)
+    // The function runs every 5 minutes, so if scheduled time is within current 5-min window, trigger it
     const scheduledMinutes = (scheduleHour * 60) + scheduleMinute;
     const currentMinutes = (localHour * 60) + localMinute;
     
-    // Round current time down to nearest 15-min interval
-    const intervalStart = Math.floor(currentMinutes / 15) * 15;
+    // Round current time down to nearest 5-min interval
+    const intervalStart = Math.floor(currentMinutes / 5) * 5;
     
-    // Check if scheduled time falls within this 15-minute interval
-    const timeMatches = scheduledMinutes >= intervalStart && scheduledMinutes < intervalStart + 15;
+    // Check if scheduled time falls within this 5-minute interval
+    const timeMatches = scheduledMinutes >= intervalStart && scheduledMinutes < intervalStart + 5;
     
-    console.log(`  Time check: scheduled=${scheduledMinutes}min, current=${currentMinutes}min, interval=${intervalStart}-${intervalStart+15}, matches=${timeMatches}`);
+    console.log(`  Time check: scheduled=${scheduledMinutes}min, current=${currentMinutes}min, interval=${intervalStart}-${intervalStart+5}, matches=${timeMatches}`);
     
     return timeMatches;
     
@@ -147,10 +147,17 @@ async function triggerPublishing(userId, schedule) {
       projectGuid: schedule.projectGuid,
       modelGuid: schedule.modelGuid,
       region: schedule.region || 'US',
-      engineVersion: schedule.engineVersion || '2024'
+      engineVersion: schedule.engineVersion || '2024',
+      extensionType: schedule.extensionType,
+      isCloudModel: schedule.isCloudModel
     };
     
     console.log(`Publishing file: ${schedule.fileName} for user: ${userId}`);
+    console.log(`  File type: ${schedule.extensionType}, Model Type: ${schedule.modelType}`);
+    
+    // Check if this is an RCM file (Revit Cloud Model)
+    // RCM = singleuser, C4R = multiuser
+    const isRCM = schedule.modelType === 'singleuser';
     
     // Make request to the server's scheduled publish endpoint
     const response = await axios.post(
@@ -167,32 +174,66 @@ async function triggerPublishing(userId, schedule) {
     
     console.log(`Publish response for ${schedule.fileName}:`, response.data);
     
-    // Log the publishing event in Firestore
+    // Get workItemId
+    const workItemId = response.data.data?.workItemId;
+    
+    if (!workItemId) {
+      throw new Error('No workItemId returned from server');
+    }
+    
+    // Save initial log entry - webhook will update it when workitem completes
     await db.collection('publishingLogs').add({
       userId: userId,
       fileId: schedule.fileId,
       fileName: schedule.fileName,
+      fileType: schedule.extensionType || 'Unknown',
+      isRCM: isRCM,
+      isC4R: !isRCM && schedule.isCloudModel,
       scheduledTime: `${schedule.time} (${schedule.timezone})`,
       actualTime: new Date().toISOString(),
-      status: 'success',
-      workItemId: response.data.data?.workItemId,
-      response: response.data
+      status: 'pending', // Will be updated by webhook
+      workItemId: workItemId,
+      message: isRCM ? 'Publishing RCM file via Design Automation...' : 'Publishing C4R file...'
     });
     
     return response.data;
     
   } catch (error) {
     console.error(`Error publishing file ${schedule.fileName}:`, error.message);
+    console.error('Full error:', error.response?.data || error);
     
-    // Log the error in Firestore
+    // Determine if this is an RCM file (use existing schedule data)
+    // RCM = singleuser, C4R = multiuser
+    const fileIsRCM = schedule.modelType === 'singleuser';
+    let errorMessage = error.message;
+    let helpfulTip = '';
+    
+    // Provide helpful error messages based on error type
+    if (fileIsRCM) {
+      errorMessage = 'RCM files require Cloud Models for Revit access. This user may not have the required permissions to publish RCM files via Design Automation.';
+    } else if (error.response?.status === 401 || error.message.includes('401')) {
+      errorMessage = '🔒 Authentication expired. Please log out and log back in to refresh your credentials.';
+      helpfulTip = 'Your Autodesk login session has expired. Log out and log back in to continue scheduled publishing.';
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
+    }
+    
+    // Log the error in Firestore with detailed information
     await db.collection('publishingLogs').add({
       userId: userId,
       fileId: schedule.fileId,
       fileName: schedule.fileName,
+      fileType: schedule.extensionType || 'Unknown',
+      isRCM: fileIsRCM,
+      isC4R: !fileIsRCM && schedule.isCloudModel,
       scheduledTime: `${schedule.time} (${schedule.timezone})`,
       actualTime: new Date().toISOString(),
       status: 'error',
-      error: error.message
+      message: errorMessage,
+      error: errorMessage,
+      helpfulTip: helpfulTip,
+      originalError: error.message,
+      statusCode: error.response?.status
     });
     
     throw error;
@@ -207,7 +248,59 @@ exports.triggerScheduleCheck = functions.region('europe-west6').https.onRequest(
     const result = await exports.checkScheduledPublishing.run();
     res.json({ success: true, result });
   } catch (error) {
-    console.error('Error in manual trigger:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error triggering schedule check:', error);
+    res.status(500).json({ error: error.message });
   }
 });
+
+/**
+ * Poll workitem status for pending logs and update them
+ * Runs every 2 minutes to check completion
+ */
+exports.checkWorkItemStatus = functions.region('europe-west6').pubsub
+  .schedule('*/2 * * * *') // Run every 2 minutes
+  .timeZone('UTC')
+  .onRun(async () => {
+    console.log('Checking workitem status for pending logs...');
+    
+    try {
+      // Use environment variables directly
+      const serverUrlValue = process.env.SERVER_URL || 'http://localhost:3000';
+      const authKeyValue = process.env.CLOUD_FUNCTION_AUTH_KEY;
+      
+      console.log(`Using server URL: ${serverUrlValue}`);
+      
+      // Call server endpoint to check pending workitems
+      const response = await axios.post(
+        `${serverUrlValue}/api/workitem-status/check-pending`,
+        {},
+        {
+          headers: {
+            'authKey': authKeyValue
+          },
+          timeout: 30000
+        }
+      );
+      
+      console.log('WorkItem check response:', response.data);
+      return response.data;
+      
+    } catch (error) {
+      console.error('Error checking workitem status:', error.message);
+      throw error;
+    }
+  });
+
+/**
+ * HTTP endpoint to manually trigger workitem status check (for testing)
+ */
+exports.triggerWorkItemCheck = functions.region('europe-west6').https.onRequest(async (req, res) => {
+  try {
+    const result = await exports.checkWorkItemStatus.run();
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Error triggering workitem check:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+

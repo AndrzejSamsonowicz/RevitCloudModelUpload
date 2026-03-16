@@ -18,6 +18,18 @@ router.get('/login', async (req, res) => {
             return res.status(400).send('Firebase authentication required');
         }
         
+        // Check if Firebase is initialized
+        try {
+            admin.app();
+        } catch (error) {
+            console.error('Firebase not initialized:', error.message);
+            return res.status(500).send(
+                'Firebase Admin SDK is not configured. ' +
+                'Please download the service account JSON file from Firebase Console and update .env file. ' +
+                'See BUILD_INSTRUCTIONS.md for details.'
+            );
+        }
+        
         // Verify Firebase token and get user ID
         const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
         const firebaseUserId = decodedToken.uid;
@@ -134,7 +146,8 @@ router.get('/session/:sessionId', (req, res) => {
         authenticated: true,
         expiresIn: session.expiresIn,
         timestamp: session.timestamp,
-        userId: session.userId,
+        userId: session.firebaseUserId, // Use Firebase userId for Firestore operations
+        apsUserId: session.userId, // APS userId
         userEmail: session.userEmail
     });
 });
@@ -153,6 +166,14 @@ router.post('/logout/:sessionId', (req, res) => {
 router.getUserToken = (sessionId) => {
     const session = sessions.get(sessionId);
     return session ? session.accessToken : null;
+};
+
+/**
+ * Get Firebase user ID from session
+ */
+router.getUserIdFromSession = (sessionId) => {
+    const session = sessions.get(sessionId);
+    return session ? session.firebaseUserId : null;
 };
 
 module.exports = router;

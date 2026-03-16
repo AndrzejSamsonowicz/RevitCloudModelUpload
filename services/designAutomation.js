@@ -12,8 +12,10 @@ class DesignAutomationService {
         this.appBundleName = process.env.APPBUNDLE_NAME || 'RevitCloudPublisher';
     }
 
-    async getHeaders() {
-        const token = await apsClient.get2LeggedToken(['code:all']);
+    async getHeaders(userCredentials = null) {
+        const token = userCredentials 
+            ? await apsClient.get2LeggedTokenForUser(['code:all'], userCredentials.clientId, userCredentials.clientSecret)
+            : await apsClient.get2LeggedToken(['code:all']);
         return {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -45,13 +47,14 @@ class DesignAutomationService {
     /**
      * Upload AppBundle (Revit add-in .zip)
      */
-    async uploadAppBundle(zipFilePath, engineVersion = '2024') {
+    async uploadAppBundle(zipFilePath, engineVersion = '2024', userCredentials = null) {
         try {
-            const headers = await this.getHeaders();
-            const clientId = process.env.APS_CLIENT_ID;
+            const headers = await this.getHeaders(userCredentials);
+            const clientId = userCredentials ? userCredentials.clientId : process.env.APS_CLIENT_ID;
             const appBundleId = `${clientId}.${this.appBundleName}`;
             const qualifiedId = `${appBundleId}+${engineVersion}`;
 
+            console.log(`[AppBundle Upload] Uploading for Client ID: ${clientId?.substring(0, 10)}...`);
             console.log(`Uploading AppBundle with ID: ${appBundleId}`);
             console.log(`Qualified ID (with engine): ${qualifiedId}`);
 
@@ -217,11 +220,11 @@ class DesignAutomationService {
     /**
      * Create/Update Activity
      */
-    async createActivity(engineVersion = '2026') {
+    async createActivity(engineVersion = '2026', userCredentials = null) {
         try {
             console.log('\n=== Activity Creation Started ===');
             console.log('Step 1: Getting auth headers...');
-            const headers = await this.getHeaders();
+            const headers = await this.getHeaders(userCredentials);
             console.log('✓ Auth headers obtained');
             
             // First, list all activities to see what exists
@@ -234,8 +237,8 @@ class DesignAutomationService {
             
             // Use client_id instead of nickname for the owner
             console.log('\nStep 3: Building activity specification...');
-            const owner = process.env.APS_CLIENT_ID;
-            console.log('  Owner (Client ID):', owner);
+            const owner = userCredentials ? userCredentials.clientId : process.env.APS_CLIENT_ID;
+            console.log('  Owner (Client ID):', owner?.substring(0, 10) + '...');
             const qualifiedAppBundleId = `${owner}.${this.appBundleName}+production`;
             console.log('  Qualified AppBundle ID:', qualifiedAppBundleId);
             const qualifiedActivityId = `${owner}.${this.activityName}`;
@@ -356,12 +359,12 @@ class DesignAutomationService {
     /**
      * Create WorkItem to run the automation
      */
-    async createWorkItem(cloudModelParams, userToken, callbackUrl, revitVersion = '2026') {
+    async createWorkItem(cloudModelParams, userToken, callbackUrl, revitVersion = '2026', userCredentials = null) {
         try {
-            const headers = await this.getHeaders();
+            const headers = await this.getHeaders(userCredentials);
             
             // First check if AppBundle exists by trying to get it
-            const owner = process.env.APS_CLIENT_ID;
+            const owner = userCredentials ? userCredentials.clientId : process.env.APS_CLIENT_ID;
             const appBundleId = `${owner}.${this.appBundleName}+production`;
             
             try {

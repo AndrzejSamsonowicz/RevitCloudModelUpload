@@ -65,7 +65,31 @@ router.post('/appbundle/auto-upload', async (req, res, next) => {
             });
         }
 
-        const result = await designAutomation.uploadAppBundle(bundlePath, engineVersion);
+        // Get user credentials from session
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No authorization token provided' });
+        }
+
+        const sessionId = authHeader.replace('Bearer ', '');
+        const authRoutes = require('./auth');
+        const firebaseUserId = authRoutes.getUserIdFromSession(sessionId);
+        
+        if (!firebaseUserId) {
+            return res.status(401).json({ error: 'User session invalid' });
+        }
+        
+        // Get user's APS credentials from Firestore
+        const { decryptUserCredentials } = require('./firebaseAuth');
+        const userCredentials = await decryptUserCredentials(firebaseUserId);
+        
+        if (!userCredentials) {
+            return res.status(400).json({ error: 'Please configure your APS credentials in Settings first' });
+        }
+
+        console.log(`[Auto-Upload] Uploading AppBundle for user (Client ID: ${userCredentials.clientId?.substring(0, 10)}...)`);
+
+        const result = await designAutomation.uploadAppBundle(bundlePath, engineVersion, userCredentials);
         
         res.json({ 
             success: true, 

@@ -2,6 +2,12 @@
 
 A web application that enables remote triggering of Revit Cloud Model publishing via **Autodesk Platform Services (APS) Design Automation**. This eliminates the need for manual interaction in the Revit desktop app.
 
+## 🔥 **CRITICAL: Working Solution Documentation**
+
+**✅ [WORKING_SOLUTION_PUBLISH_RCM.md](WORKING_SOLUTION_PUBLISH_RCM.md)** - Read this first!  
+**Verified Working**: March 15, 2026  
+**Key Finding**: Use `C4RModelPublish` API directly - no Design Automation needed for publishing existing changes.
+
 ## 🎯 What This Does
 
 - **Remotely trigger** Revit automation jobs from a web interface

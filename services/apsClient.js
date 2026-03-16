@@ -47,6 +47,33 @@ class APSClient {
     }
 
     /**
+     * Get 2-legged OAuth token for app-level access with user-specific credentials
+     */
+    async get2LeggedTokenForUser(scopes = ['code:all', 'data:read', 'data:write'], clientId, clientSecret) {
+        try {
+            console.log(`[APS Client] Getting 2-legged token for user with Client ID: ${clientId?.substring(0, 10)}...`);
+            const response = await axios.post(
+                `${APS_BASE_URL}/authentication/v2/token`,
+                new URLSearchParams({
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    grant_type: 'client_credentials',
+                    scope: scopes.join(' ')
+                }),
+                {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                }
+            );
+
+            console.log(`[APS Client] ✓ 2-legged token obtained successfully for ${clientId?.substring(0, 10)}...`);
+            return response.data.access_token;
+        } catch (error) {
+            console.error(`[APS Client] Failed to get 2-legged token for user (Client ID: ${clientId?.substring(0, 10)}...):`, error.response?.data || error.message);
+            throw new Error('OAuth authentication failed');
+        }
+    }
+
+    /**
      * Get 3-legged OAuth authorization URL for user access
      */
     getAuthorizationUrl(state = '') {
@@ -66,7 +93,7 @@ class APSClient {
      * Get 3-legged OAuth authorization URL with user-specific credentials
      */
     getAuthorizationUrlForUser(state = '', clientId, clientSecret) {
-        const scopes = ['data:read', 'data:write', 'code:all'];
+        const scopes = ['data:read', 'data:write', 'data:create', 'code:all'];
         const params = new URLSearchParams({
             response_type: 'code',
             client_id: clientId,

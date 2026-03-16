@@ -25,7 +25,7 @@ This directory contains Firebase Cloud Functions that enable automatic scheduled
 
 ### `checkScheduledPublishing`
 - **Type:** Scheduled (PubSub trigger)
-- **Schedule:** Every 15 minutes (`*/15 * * * *`)
+- **Schedule:** Every 5 minutes (`*/5 * * * *`)
 - **Purpose:** Checks all users' publishing schedules and triggers publishing for matching files
 
 ### `triggerScheduleCheck`

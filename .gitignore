@@ -42,3 +42,11 @@ RevitAppBundle/.vs/
 tmp/
 temp/
 *.tmp
+
+# Test/debug scripts
+check-workitems*.js
+quick-check.js
+server-log.txt
+
+# API documentation backups
+*.txt.bak

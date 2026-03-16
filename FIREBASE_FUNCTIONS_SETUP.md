@@ -21,7 +21,7 @@ Cloud Functions require the Blaze plan:
 
 **Cost estimates:**
 - Cloud Functions: First 2 million invocations/month are free
-- Scheduled function runs every 15 minutes = ~2,880 runs/month (well within free tier)
+- Scheduled function runs every 5 minutes = ~8,640 runs/month (well within free tier)
 - Firestore operations: 50K reads + 20K writes/day free
 
 ## Step 2: Install Dependencies
@@ -109,7 +109,7 @@ firebase functions:list
 ```
 
 You should see:
-- `checkScheduledPublishing` - Runs automatically every 15 minutes
+- `checkScheduledPublishing` - Runs automatically every 5 minutes
 - `triggerScheduleCheck` - HTTP endpoint for manual testing
 
 ## Step 7: Test Manual Trigger (Optional)
@@ -155,7 +155,7 @@ Or view in Firebase Console:
 
 1. **User sets schedule** in the web app (weekdays, time, timezone)
 2. **User clicks "Save Publishing Schedules"** - stores in Firestore
-3. **Cloud Function runs every 15 minutes** - `checkScheduledPublishing`
+3. **Cloud Function runs every 5 minutes** - `checkScheduledPublishing`
 4. **Function checks** all users' schedules against current time
 5. **If match found** - Function calls your VM's `/api/designautomation/scheduled-publish` endpoint
 6. **Your server** handles the Design Automation API call with stored user tokens

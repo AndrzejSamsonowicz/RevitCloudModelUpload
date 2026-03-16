@@ -7,6 +7,7 @@ const admin = require('firebase-admin');
 const authRoutes = require('./routes/auth');
 const designAutomationRoutes = require('./routes/designAutomation');
 const webhookRoutes = require('./routes/webhooks');
+const workitemStatusRoutes = require('./routes/workitemStatus');
 const dataManagementRoutes = require('./routes/dataManagement');
 const { router: firebaseAuthRoutes } = require('./routes/firebaseAuth');
 const licenseRoutes = require('./routes/licenses');
@@ -65,6 +66,7 @@ app.use('/api/auth', firebaseAuthRoutes);
 app.use('/api/admin', adminToolsRoutes);
 app.use('/api', licenseRoutes);
 app.use('/webhooks', webhookRoutes);
+app.use('/api/workitem-status', workitemStatusRoutes);
 
 // Serve frontend pages
 app.get('/', (req, res) => {

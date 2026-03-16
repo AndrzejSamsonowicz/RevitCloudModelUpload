@@ -85,101 +85,103 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
     try {
         const { projectId, folderId } = req.params;
         
-        // Use search endpoint to recursively find all .rvt files
-        const response = await axios.get(
-            `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${encodeURIComponent(folderId)}/search`,
-            {
-                headers: { 'Authorization': `Bearer ${req.accessToken}` },
-                params: {
-                    'filter[fileType]': 'rvt'  // Filter for Revit files
-                }
-            }
-        );
-
-        // Get unique item IDs (search returns versions, we need items to get parent folders)
-        const itemIds = [...new Set(
-            response.data.data
-                .map(version => version.relationships?.item?.data?.id)
-                .filter(id => id)
-        )];
-
-        console.log(`Found ${itemIds.length} unique items`);
-
-        // Fetch item details to get parent folder for each
-        const itemFolderMap = {};
-        const folderDetailsMap = {};
+        // Browse folder tree recursively to find all .rvt files
+        // This approach is more reliable than search API for users with complex permissions
+        const folderNameCache = {};
+        const allRevitFiles = [];
+        const processedFolders = new Set();
         
-        await Promise.all(
-            itemIds.map(async (itemId) => {
-                try {
-                    // Get item to find parent folder
-                    const itemResponse = await axios.get(
-                        `https://developer.api.autodesk.com/data/v1/projects/${projectId}/items/${encodeURIComponent(itemId)}`,
-                        {
-                            headers: { 'Authorization': `Bearer ${req.accessToken}` }
-                        }
-                    );
+        async function getAllRvtFilesRecursive(currentFolderId, currentPath = '', depth = 0) {
+            if (depth > 10 || processedFolders.has(currentFolderId)) {
+                return;
+            }
+            processedFolders.add(currentFolderId);
+            
+            try {
+                let nextPageUrl = `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${encodeURIComponent(currentFolderId)}/contents`;
+                
+                // Handle pagination - some folders have many items
+                while (nextPageUrl) {
+                    const contentsResponse = await axios.get(nextPageUrl, {
+                        headers: { 'Authorization': `Bearer ${req.accessToken}` }
+                    });
                     
-                    const parentFolderId = itemResponse.data.data.relationships?.parent?.data?.id;
-                    itemFolderMap[itemId] = parentFolderId;
-                    
-                    // Fetch folder details if we haven't already
-                    if (parentFolderId && !folderDetailsMap[parentFolderId]) {
-                        try {
-                            // Build full path by recursively following parent folders
-                            const pathParts = [];
-                            let currentFolderId = parentFolderId;
-                            const visitedFolders = new Set(); // Prevent infinite loops
-                            
-                            while (currentFolderId && !visitedFolders.has(currentFolderId)) {
-                                visitedFolders.add(currentFolderId);
-                                
-                                const folderResponse = await axios.get(
-                                    `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${encodeURIComponent(currentFolderId)}`,
-                                    {
-                                        headers: { 'Authorization': `Bearer ${req.accessToken}` }
-                                    }
-                                );
-                                
-                                const folderData = folderResponse.data.data;
-                                const folderName = folderData.attributes?.displayName || folderData.attributes?.name;
-                                
-                                if (folderName) {
-                                    pathParts.unshift(folderName); // Add to beginning of array
-                                }
-                                
-                                // Get parent folder ID to continue up the hierarchy
-                                currentFolderId = folderData.relationships?.parent?.data?.id;
-                                
-                                // Stop if we reach "Project Files" or a root folder
-                                if (folderName === 'Project Files' || !currentFolderId) {
-                                    break;
-                                }
+                    // Build a map of version IDs to version data from the included array
+                    const includedVersions = {};
+                    if (contentsResponse.data.included) {
+                        for (const includedItem of contentsResponse.data.included) {
+                            if (includedItem.type === 'versions') {
+                                includedVersions[includedItem.id] = includedItem;
                             }
-                            
-                            // Remove "Project Files" from the path if present
-                            const filteredParts = pathParts.filter(part => part !== 'Project Files');
-                            const folderPath = '/' + filteredParts.join('/');
-                            folderDetailsMap[parentFolderId] = folderPath;
-                            console.log(`Built path for ${parentFolderId}: ${folderPath}`);
-                        } catch (folderError) {
-                            console.error(`Error fetching folder ${parentFolderId}:`, folderError.message);
-                            folderDetailsMap[parentFolderId] = '/Unknown';
                         }
                     }
-                } catch (error) {
-                    console.error(`Error fetching item ${itemId}:`, error.message);
+                    
+                    for (const item of contentsResponse.data.data) {
+                        if (item.type === 'folders') {
+                            // Cache this folder
+                            const folderName = item.attributes.displayName || item.attributes.name;
+                            const fullPath = currentPath ? `${currentPath}/${folderName}` : `/${folderName}`;
+                            folderNameCache[item.id] = fullPath;
+                            
+                            // Recursively process subfolders
+                            await getAllRvtFilesRecursive(item.id, fullPath, depth + 1);
+                        } else if (item.type === 'items') {
+                            const displayName = item.attributes?.displayName || item.attributes?.name || 'Unknown';
+                            const fileType = item.attributes?.extension?.type;
+                            
+                            // Check if this is a Revit file (check both name and extension type)
+                            const isRvtByName = displayName.toLowerCase().endsWith('.rvt');
+                            const isRvtByType = fileType?.toLowerCase().includes('rvt');
+                            
+                            if (isRvtByName || isRvtByType) {
+                                // Get the tip version from the item's relationships and included array
+                                const tipVersionId = item.relationships?.tip?.data?.id;
+                                const tipVersion = tipVersionId ? includedVersions[tipVersionId] : null;
+                                
+                                if (tipVersion) {
+                                    tipVersion._itemId = item.id;
+                                    tipVersion._folderPath = currentPath || '/';
+                                    allRevitFiles.push(tipVersion);
+                                    console.log(`Found: ${displayName} v${tipVersion.attributes?.versionNumber || '?'} in ${currentPath || '/'}`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Check for next page
+                    nextPageUrl = contentsResponse.data.links?.next?.href;
+                    if (nextPageUrl && !nextPageUrl.startsWith('http')) {
+                        nextPageUrl = `https://developer.api.autodesk.com${nextPageUrl}`;
+                    }
                 }
-            })
-        );
-
-        console.log('Folder paths:', folderDetailsMap);
-
-        // Extract relevant file information including cloud model GUIDs and folder paths
-        const rvtFiles = response.data.data.map(version => {
-            const itemId = version.relationships?.item?.data?.id;
-            const parentFolderId = itemFolderMap[itemId];
-            const folderPath = parentFolderId ? (folderDetailsMap[parentFolderId] || '/') : '/';
+            } catch (error) {
+                console.log(`Could not browse folder ${currentFolderId}:`, error.response?.status);
+            }
+        }
+        
+        // Get the root folder name first, then browse recursively
+        let rootFolderName = '';
+        try {
+            const rootFolderResponse = await axios.get(
+                `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${encodeURIComponent(folderId)}`,
+                {
+                    headers: { 'Authorization': `Bearer ${req.accessToken}` }
+                }
+            );
+            rootFolderName = rootFolderResponse.data.data.attributes?.displayName || rootFolderResponse.data.data.attributes?.name || '';
+        } catch (error) {
+            console.log(`Could not fetch root folder name:`, error.response?.status);
+        }
+        
+        const rootPath = rootFolderName && rootFolderName !== 'Project Files' ? `/${rootFolderName}` : '';
+        await getAllRvtFilesRecursive(folderId, rootPath);
+        
+        console.log(`Recursive browse found ${allRevitFiles.length} Revit files`);
+        
+        // We already have folder paths from the recursive browse
+        // Just format the file information
+        const rvtFiles = allRevitFiles.map(version => {
+            const folderPath = version._folderPath || '/';
             
             return {
                 id: version.id,
@@ -195,7 +197,7 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                 isCloudModel: version.attributes?.extension?.type?.includes('C4RModel'),
                 projectGuid: version.attributes?.extension?.data?.projectGuid,
                 modelGuid: version.attributes?.extension?.data?.modelGuid,
-                // Folder path from parent folder details
+                // Folder path we collected during browse
                 folderPath: folderPath,
                 publishedDate: version.attributes?.extension?.data?.publishedDate || null
             };
@@ -203,34 +205,38 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
 
         res.json({ files: rvtFiles, total: rvtFiles.length });
     } catch (error) {
-        console.error('Error searching Revit files:', error.response?.data || error.message);
+        console.error('Error browsing Revit files:', error.response?.data || error.message);
         res.status(error.response?.status || 500).json({
             error: error.response?.data || error.message
         });
     }
 });
 
-// Publish a workshared cloud model to BIM 360 Docs
-// This makes the model viewable/searchable after synchronization
+// Publish a cloud model - handles both single-user and workshared models
+// ✅ VERIFIED WORKING: March 15, 2026
+// This is the CORRECT approach - just call C4RModelPublish API directly
+// See: WORKING_SOLUTION_PUBLISH_RCM.md for full documentation
 router.post('/publish/:itemId', getAccessToken, async (req, res) => {
     try {
-        const { itemId } = req.params;  // This is the file version ID
-        const { projectId } = req.body;
+        const { itemId } = req.params;
+        const { projectId, projectGuid, modelGuid, fileName, region } = req.body;
 
         if (!projectId) {
             return res.status(400).json({ error: 'projectId is required in request body' });
         }
 
-        console.log('PublishModel request:', { itemId, projectId });
+        console.log('Manual publish request:', { itemId, projectId, projectGuid, modelGuid, fileName, region });
 
-        // Extract the base URN (lineage) by removing version query parameter
-        // File version ID: urn:adsk.wipprod:fs.file:vf.xxx?version=8
-        // Item lineage ID: urn:adsk.wipprod:dm.lineage:xxx
+        // For single-user RCM files: Just call PublishModel API directly
+        // The files already have unpublished changes from manual edits
+        // No need for WorkItem if we're just publishing existing changes
+        console.log('✓ Publishing existing unpublished changes to create new version');
+
+        // Extract the base URN (lineage) and detect model type
         let lineageId = itemId;
+        let modelType = null;
         
-        // If itemId contains version parameter, we need to get the item lineage
         if (itemId.includes('fs.file')) {
-            // Get item details to find the lineage
             const versionResponse = await axios.get(
                 `https://developer.api.autodesk.com/data/v1/projects/${projectId}/versions/${encodeURIComponent(itemId)}`,
                 {
@@ -238,13 +244,20 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
                 }
             );
             
-            // Get item from version relationships
             const itemLink = versionResponse.data.data.relationships?.item?.data?.id;
             if (itemLink) {
                 lineageId = itemLink;
-                console.log('Resolved lineage ID:', lineageId);
+                console.log('  Resolved lineage ID:', lineageId);
             }
+            
+            modelType = versionResponse.data.data.attributes?.extension?.data?.modelType;
         }
+        
+        console.log(`  Model type: ${modelType || 'unknown'}`);
+        
+        // Use C4RModelPublish for all Revit cloud models (both single-user and workshared)
+        const publishCommandType = 'commands:autodesk.bim360:C4RModelPublish';
+        console.log(`✓ Using ${publishCommandType}`);
 
         // Create PublishModel command
         const payload = {
@@ -253,7 +266,7 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
                 type: 'commands',
                 attributes: {
                     extension: {
-                        type: 'commands:autodesk.bim360:C4RModelPublish',
+                        type: publishCommandType,
                         version: '1.0.0'
                     }
                 },
@@ -265,7 +278,6 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
             }
         };
 
-        console.log('Publishing model with payload:', JSON.stringify(payload, null, 2));
         const response = await axios.post(
             `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands`,
             payload,
@@ -277,7 +289,6 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
             }
         );
 
-        console.log('PublishModel response:', response.data);
         res.json({
             success: true,
             commandId: response.data.data.id,
@@ -286,8 +297,29 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Error publishing model:', error.response?.data || error.message);
+        
+        // Enhanced error response with full details
+        const errorDetail = error.response?.data?.errors?.[0];
+        const errorMessage = errorDetail?.detail || error.response?.data || error.message;
+        const errorCode = errorDetail?.code;
+        
+        // Check for specific error cases
+        let userMessage = errorMessage;
+        if (error.response?.status === 403) {
+            if (errorCode === 'C4R') {
+                userMessage = 'No unpublished changes to publish, or insufficient permissions. The file may already be at the latest version.';
+            } else {
+                userMessage = 'Permission denied. You may not have rights to publish this file.';
+            }
+        }
+        
         res.status(error.response?.status || 500).json({
-            error: error.response?.data?.errors?.[0]?.detail || error.response?.data || error.message
+            error: userMessage,
+            details: {
+                statusCode: error.response?.status,
+                errorCode: errorCode,
+                originalError: errorMessage
+            }
         });
     }
 });

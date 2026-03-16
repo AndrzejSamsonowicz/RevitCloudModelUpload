@@ -1,5 +1,6 @@
 let sessionId = null;
 let userId = null; // Consistent APS user ID for Firestore
+let historyRefreshInterval = null; // Auto-refresh interval for pending entries
 
 // Global interval ID for time updates
 let timeSincePublishInterval = null;
@@ -434,7 +435,10 @@ async function autoUploadAppBundle() {
 
         const response = await fetch('/api/design-automation/appbundle/auto-upload', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionId}`
+            },
             body: JSON.stringify({ engineVersion })
         });
 
@@ -535,7 +539,8 @@ async function publishModel() {
             projectGuid: item.dataset.projectGuid,
             modelGuid: item.dataset.modelGuid,
             fileName: item.dataset.fileName,
-            itemId: item.dataset.itemId
+            itemId: item.dataset.itemId,
+            region: item.dataset.region || 'US'
         };
     });
 
@@ -563,16 +568,28 @@ async function publishModel() {
                     'Authorization': `Bearer ${sessionId}`
                 },
                 body: JSON.stringify({
-                    projectId: selectedProjectId
+                    projectId: selectedProjectId,
+                    projectGuid: file.projectGuid,
+                    modelGuid: file.modelGuid,
+                    fileName: file.fileName,
+                    region: file.region
                 })
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                addLog(`  ✓ Publish command initiated successfully`, 'success');
-                addLog(`  Command ID: ${data.commandId}`);
-                addLog(`  Status: ${data.status}`);
+                if (data.workItemId) {
+                    // Design Automation path (single-user models)
+                    addLog(`  ✓ Design Automation WorkItem created`, 'success');
+                    addLog(`  WorkItem ID: ${data.workItemId}`);
+                    addLog(`  File will be saved to ACC with new version`);
+                } else {
+                    // PublishModel API path (workshared models)
+                    addLog(`  ✓ Publish command initiated successfully`, 'success');
+                    addLog(`  Command ID: ${data.commandId}`);
+                    addLog(`  Status: ${data.status}`);
+                }
                 successCount++;
                 
                 // Save to publishing history
@@ -580,8 +597,9 @@ async function publishModel() {
                     file.fileName,
                     selectedProjectName || 'Unknown Project',
                     'success',
-                    'Publish command initiated successfully',
+                    data.workItemId ? 'Design Automation WorkItem created' : 'Publish command initiated successfully',
                     {
+                        workItemId: data.workItemId,
                         commandId: data.commandId,
                         status: data.status,
                         itemId: file.itemId,
@@ -592,16 +610,40 @@ async function publishModel() {
                 addLog(`  ✗ Error: ${data.error}`, 'error');
                 failCount++;
                 
-                // Save to publishing history
+                // Determine if this is an RCM service access issue
+                let errorType = 'error';
+                let errorMessage = `Publish failed: ${data.error}`;
+                let helpfulTip = '';
+                
+                // Check for specific error patterns
+                if (data.details) {
+                    // 403 with code 'C4R' typically means RCM service not enabled
+                    if (data.details.statusCode === 403 && data.details.errorCode === 'C4R') {
+                        errorType = 'warning';
+                        helpfulTip = '💡 This user may not have "Cloud Models for Revit" service enabled. Contact your Autodesk Account Admin to grant access.';
+                        addLog(`  ⚠ ${helpfulTip}`, 'warning');
+                    }
+                    // No unpublished changes
+                    else if (data.error.includes('No unpublished changes')) {
+                        errorType = 'warning';
+                        helpfulTip = 'File is already at the latest version with no pending changes.';
+                    }
+                }
+                
+                // Save to publishing history with enhanced details
                 saveToPublishingHistory(
                     file.fileName,
                     selectedProjectName || 'Unknown Project',
-                    'error',
-                    `Publish failed: ${data.error}`,
+                    errorType,
+                    errorMessage,
                     {
                         itemId: file.itemId,
                         projectId: selectedProjectId,
-                        errorDetails: data.error
+                        errorDetails: data.error,
+                        errorCode: data.details?.errorCode,
+                        statusCode: data.details?.statusCode,
+                        helpfulTip: helpfulTip,
+                        originalError: data.details?.originalError
                     }
                 );
             }
@@ -1015,17 +1057,17 @@ async function selectProject(projectId, projectName) {
         
         const topFoldersData = await topFoldersResponse.json();
         if (topFoldersResponse.ok) {
-            // Find "Project Files" folder
-            const projectFilesFolder = topFoldersData.data.find(folder => 
-                folder.attributes.name === 'Project Files' || 
-                folder.attributes.name.includes('Files')
-            );
+            // For non-admin users, topFolders returns all highest-level folders they have access to
+            // We need to search ALL of them, not just "Project Files"
+            console.log(`Found ${topFoldersData.data.length} top-level folders:`, topFoldersData.data.map(f => f.attributes.name));
             
-            if (projectFilesFolder) {
-                await loadRevitFiles(projectId, projectFilesFolder.id);
-            } else {
-                showLoadingModalError('Project Files folder not found');
+            if (topFoldersData.data.length === 0) {
+                showLoadingModalError('No accessible folders found');
+                return;
             }
+            
+            // Load files from all top folders
+            await loadRevitFilesFromMultipleFolders(projectId, topFoldersData.data);
         }
     } catch (error) {
         showLoadingModalError(`Failed to load folders: ${error.message}`);
@@ -1034,7 +1076,64 @@ async function selectProject(projectId, projectName) {
 
 let allRevitFiles = [];
 
+async function loadRevitFilesFromMultipleFolders(projectId, folders) {
+    try {
+        // Search each top folder and combine results
+        const allFiles = [];
+        
+        for (const folder of folders) {
+            console.log(`Searching folder: ${folder.attributes.name || folder.attributes.displayName}`);
+            
+            const response = await fetch(
+                `/api/data-management/projects/${projectId}/folders/${encodeURIComponent(folder.id)}/rvtFiles`,
+                { headers: { 'Authorization': `Bearer ${sessionId}` } }
+            );
+            
+            const data = await response.json();
+            if (response.ok && data.files) {
+                console.log(`  Found ${data.files.length} files in ${folder.attributes.name}`);
+                allFiles.push(...data.files);
+            }
+        }
+        
+        console.log(`Total files found across all folders: ${allFiles.length}`);
+        
+        // Display combined results
+        const filesList = document.getElementById('rvtFilesList');
+        
+        if (allFiles.length === 0) {
+            filesList.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No Revit cloud models found</div>';
+            allRevitFiles = [];
+            document.getElementById('publishingActions').style.display = 'none';
+            hideLoadingModal();
+            return;
+        }
+        
+        // Store and display files
+        displayRevitFiles(allFiles);
+    } catch (error) {
+        showLoadingModalError(`Failed to load files: ${error.message}`);
+    }
+}
+
+function displayRevitFiles(files) {
+    allRevitFiles = files.map((file, index) => ({
+        ...file,
+        index,
+    }));
+    
+    renderFilesList();
+    updateFileSelection();
+    
+    // Show publishing action buttons after files are loaded
+    document.getElementById('publishingActions').style.display = 'block';
+    
+    hideLoadingModal();
+}
+
 async function loadRevitFiles(projectId, folderId) {
+    // This function is deprecated, use loadRevitFilesFromMultipleFolders instead
+    // Keeping for backward compatibility
     try {
         const response = await fetch(
             `/api/data-management/projects/${projectId}/folders/${encodeURIComponent(folderId)}/rvtFiles`,
@@ -1103,6 +1202,14 @@ function sortFiles(column) {
             case 'date':
                 valueA = new Date(a.publishedDate || a.lastModifiedTime || 0);
                 valueB = new Date(b.publishedDate || b.lastModifiedTime || 0);
+                break;
+            case 'timeSince':
+                valueA = new Date(a.publishedDate || a.lastModifiedTime || 0).getTime();
+                valueB = new Date(b.publishedDate || b.lastModifiedTime || 0).getTime();
+                break;
+            case 'fileType':
+                valueA = a.modelType === 'singleuser' ? 'RCM' : 'C4R';
+                valueB = b.modelType === 'singleuser' ? 'RCM' : 'C4R';
                 break;
         }
         
@@ -1180,6 +1287,18 @@ function renderFilesList() {
     thName.innerHTML = `Name${getSortIndicator('name')}`;
     thName.onclick = () => sortFiles('name');
     
+    // File Type column
+    const thFileType = document.createElement('th');
+    thFileType.style.padding = '8px';
+    thFileType.style.textAlign = 'left';
+    thFileType.style.borderBottom = '2px solid #ddd';
+    thFileType.style.borderRight = '1px solid #ddd';
+    thFileType.style.cursor = 'pointer';
+    thFileType.style.userSelect = 'none';
+    thFileType.style.whiteSpace = 'nowrap';
+    thFileType.innerHTML = `File Type${getSortIndicator('fileType')}`;
+    thFileType.onclick = () => sortFiles('fileType');
+    
     // Folder Path column
     const thPath = document.createElement('th');
     thPath.style.padding = '8px';
@@ -1210,8 +1329,11 @@ function renderFilesList() {
     thTimeSince.style.textAlign = 'left';
     thTimeSince.style.borderBottom = '2px solid #ddd';
     thTimeSince.style.borderRight = '1px solid #ddd';
+    thTimeSince.style.cursor = 'pointer';
+    thTimeSince.style.userSelect = 'none';
     thTimeSince.style.whiteSpace = 'nowrap';
-    thTimeSince.innerHTML = `Time Since Publish`;
+    thTimeSince.innerHTML = `Time Since Publish${getSortIndicator('timeSince')}`;
+    thTimeSince.onclick = () => sortFiles('timeSince');
     
     // Publishing Time column
     const thPublishTime = document.createElement('th');
@@ -1223,6 +1345,7 @@ function renderFilesList() {
     
     headerRow.appendChild(thCheckbox);
     headerRow.appendChild(thName);
+    headerRow.appendChild(thFileType);
     headerRow.appendChild(thPath);
     headerRow.appendChild(thDate);
     headerRow.appendChild(thTimeSince);
@@ -1272,6 +1395,23 @@ function renderFilesList() {
         tdName.style.whiteSpace = 'normal';
         tdName.style.wordBreak = 'break-word';
         tdName.textContent = `${file.name} (v${file.versionNumber})`;
+        
+        // File Type cell
+        const tdFileType = document.createElement('td');
+        tdFileType.style.padding = '8px';
+        tdFileType.style.borderRight = '1px solid #ddd';
+        tdFileType.style.fontSize = '12px';
+        tdFileType.style.whiteSpace = 'nowrap';
+        tdFileType.style.textAlign = 'center';
+        
+        // Determine file type based on modelType:
+        // singleuser = RCM (Revit Cloud Model)
+        // multiuser = C4R (Cloud Worksharing)
+        const isRCM = file.modelType === 'singleuser';
+        const fileTypeBadge = isRCM 
+            ? '<span style="background: #6f42c1; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 500; font-size: 11px;">RCM</span>'
+            : '<span style="background: #17a2b8; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 500; font-size: 11px;">C4R</span>';
+        tdFileType.innerHTML = fileTypeBadge;
         
         const tdPath = document.createElement('td');
         tdPath.style.padding = '8px';
@@ -1346,9 +1486,17 @@ function renderFilesList() {
                     <select class="publish-minute-input" data-file-id="${file.id}" style="padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; flex: 1;">
                         <option value="">Min</option>
                         <option value="00">00</option>
+                        <option value="05">05</option>
+                        <option value="10">10</option>
                         <option value="15">15</option>
+                        <option value="20">20</option>
+                        <option value="25">25</option>
                         <option value="30">30</option>
+                        <option value="35">35</option>
+                        <option value="40">40</option>
                         <option value="45">45</option>
+                        <option value="50">50</option>
+                        <option value="55">55</option>
                     </select>
                 </div>
                 <div style="font-size: 10px; color: #999;">Local time: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}</div>
@@ -1357,6 +1505,7 @@ function renderFilesList() {
         
         tr.appendChild(tdCheckbox);
         tr.appendChild(tdName);
+        tr.appendChild(tdFileType);
         tr.appendChild(tdPath);
         tr.appendChild(tdDate);
         tr.appendChild(tdTimeSince);
@@ -1588,6 +1737,10 @@ function formatScheduleDisplay(schedule) {
 // Save all publishing schedules to Firestore
 async function savePublishingSchedules() {
     try {
+        console.log('=== savePublishingSchedules called ===');
+        console.log('Firebase available:', typeof firebase !== 'undefined');
+        console.log('userId:', userId);
+        
         if (typeof firebase === 'undefined') {
             console.warn('Firebase not loaded, cannot save schedules');
             showMessage('publishMessage', 'Firebase not initialized. Please refresh the page.', 'error');
@@ -1595,25 +1748,43 @@ async function savePublishingSchedules() {
         }
         
         if (!userId) {
+            console.error('No userId - user must be logged in');
             showMessage('publishMessage', 'You must be logged in to save schedules', 'error');
             return;
         }
         
         const schedules = getAllPublishingSchedules();
+        console.log('Collected schedules:', schedules.length, schedules);
         
         // Enhance schedules with additional metadata needed for publishing
         const enhancedSchedules = schedules.map(schedule => {
             const row = document.querySelector(`tr[data-file-id="${schedule.fileId}"]`);
-            if (!row) return schedule;
+            if (!row) {
+                console.warn(`Row not found for fileId: ${schedule.fileId}`);
+                return schedule;
+            }
             
-            return {
+            // Find the file data to get type information
+            const fileData = allRevitFiles.find(f => f.id === schedule.fileId);
+            
+            const enhanced = {
                 ...schedule,
                 projectId: selectedProjectId, // Add projectId (e.g., b.xxx format)
                 projectGuid: row.dataset.projectGuid,
                 modelGuid: row.dataset.modelGuid,
-                region: row.dataset.region || 'US'
+                region: row.dataset.region || 'US',
+                // Add file type information
+                extensionType: fileData?.extensionType || '',
+                modelType: fileData?.modelType || '',
+                isCloudModel: fileData?.isCloudModel || false
             };
+            
+            console.log('Enhanced schedule:', enhanced);
+            return enhanced;
         });
+        
+        console.log('Saving to Firestore, userId:', userId);
+        console.log('Enhanced schedules:', enhancedSchedules);
         
         const db = firebase.firestore();
         await db.collection('users').doc(userId).set({
@@ -1769,11 +1940,26 @@ function showPublishingHistory() {
     const modal = document.getElementById('publishingHistoryModal');
     modal.style.display = 'flex';
     refreshPublishingHistory();
+    
+    // Start aggressive auto-refresh for pending entries (every 3 seconds)
+    if (historyRefreshInterval) {
+        clearInterval(historyRefreshInterval);
+    }
+    historyRefreshInterval = setInterval(() => {
+        console.log('[Auto-refresh] Checking for updates...');
+        refreshPublishingHistory();
+    }, 3000); // Refresh every 3 seconds to catch updates quickly
 }
 
 function closePublishingHistory() {
     const modal = document.getElementById('publishingHistoryModal');
     modal.style.display = 'none';
+    
+    // Stop auto-refresh
+    if (historyRefreshInterval) {
+        clearInterval(historyRefreshInterval);
+        historyRefreshInterval = null;
+    }
 }
 
 async function refreshPublishingHistory() {
@@ -1801,25 +1987,62 @@ async function refreshPublishingHistory() {
                 console.log('Fetching Firestore history for user:', userId);
                 
                 const db = firebase.firestore();
+                
+                // Debug: Check ALL logs in database
+                const allLogsSnapshot = await db.collection('publishingLogs').limit(10).get();
+                console.log('Total publishingLogs in database (sample):', allLogsSnapshot.docs.length);
+                if (allLogsSnapshot.docs.length > 0) {
+                    console.log('Sample log userIds:', allLogsSnapshot.docs.map(d => ({
+                        userId: d.data().userId,
+                        fileName: d.data().fileName
+                    })));
+                }
+                
                 // Query without orderBy to avoid index requirement - sort client-side instead
                 const logsSnapshot = await db.collection('publishingLogs')
                     .where('userId', '==', userId)
                     .limit(100)  // Increased limit since we'll sort client-side
                     .get();
                 
+                console.log('Firestore logs found:', logsSnapshot.docs.length);
+                console.log('Firestore log sample:', logsSnapshot.docs.length > 0 ? logsSnapshot.docs[0].data() : 'none');
+                
                 firestoreHistory = logsSnapshot.docs.map(doc => {
                     const data = doc.data();
+                    
+                    // Determine status and message
+                    let displayStatus = data.status || 'info';
+                    let displayMessage = data.message;
+                    
+                    // If no custom message, generate one
+                    if (!displayMessage) {
+                        if (data.status === 'success') {
+                            const fileType = data.isRCM ? 'RCM' : (data.isC4R ? 'C4R' : '');
+                            displayMessage = `${fileType} file published successfully at ${data.scheduledTime}`;
+                        } else {
+                            displayMessage = data.error || 'Scheduled publish failed';
+                        }
+                    }
+                    
+                    // Add helpful tip to details if available
+                    const enhancedDetails = { ...data.details };
+                    if (data.helpfulTip) {
+                        enhancedDetails.helpfulTip = data.helpfulTip;
+                    }
+                    
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
-                        projectName: 'Scheduled Publish', // Could enhance this later
-                        status: data.status,
-                        message: data.status === 'success' 
-                            ? `Scheduled publish completed at ${data.scheduledTime}` 
-                            : `Scheduled publish failed: ${data.error}`,
+                        projectName: 'Scheduled Publish',
+                        status: displayStatus,
+                        message: displayMessage,
                         details: {
                             scheduledTime: data.scheduledTime,
                             workItemId: data.workItemId,
+                            workItemStatus: data.workItemStatus,
+                            fileType: data.fileType,
+                            isRCM: data.isRCM,
+                            isC4R: data.isC4R,
                             source: 'scheduled'
                         }
                     };
@@ -1847,10 +2070,11 @@ async function refreshPublishingHistory() {
         console.log('Combined history length:', allHistory.length);
         console.log('Combined history:', allHistory);
         
-        countSpan.textContent = `${allHistory.length} record${allHistory.length !== 1 ? 's' : ''} (${localHistory.length} manual, ${firestoreHistory.length} scheduled)`;
+        // Don't update count here, we'll do it at the end after checking for pending entries
         
         if (allHistory.length === 0) {
             contentDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No publishing history found</div>';
+            countSpan.textContent = '0 records';
             return;
         }
         
@@ -1860,9 +2084,16 @@ async function refreshPublishingHistory() {
             const date = new Date(entry.timestamp);
             const formattedDate = date.toLocaleString();
             
+            // Check if entry is pending
+            const isPending = entry.status === 'pending' || 
+                (entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully'));
+            
             let statusColor = '#6c757d';
             let statusIcon = 'ℹ';
-            if (entry.status === 'success') {
+            if (isPending) {
+                statusColor = '#0696D7';
+                statusIcon = '⏳';
+            } else if (entry.status === 'success') {
                 statusColor = '#28a745';
                 statusIcon = '✓';
             } else if (entry.status === 'error') {
@@ -1880,6 +2111,16 @@ async function refreshPublishingHistory() {
                 ? '<span style="background: #0696D7; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">SCHEDULED</span>'
                 : '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">MANUAL</span>';
             
+            // File type badge for scheduled publishes
+            let fileTypeBadge = '';
+            if (isScheduled && entry.details) {
+                if (entry.details.isRCM) {
+                    fileTypeBadge = '<span style="background: #6f42c1; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">RCM</span>';
+                } else if (entry.details.isC4R) {
+                    fileTypeBadge = '<span style="background: #17a2b8; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">C4R</span>';
+                }
+            }
+            
             html += `
                 <div style="background: white; border-left: 4px solid ${statusColor}; padding: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
@@ -1888,6 +2129,7 @@ async function refreshPublishingHistory() {
                                 <span style="color: ${statusColor}; margin-right: 8px; font-size: 16px;">${statusIcon}</span>
                                 ${entry.fileName}
                                 ${sourceBadge}
+                                ${fileTypeBadge}
                             </div>
                             <div style="font-size: 12px; color: #666;">
                                 ${entry.projectName || 'Unknown Project'}
@@ -1900,10 +2142,31 @@ async function refreshPublishingHistory() {
                     <div style="color: #333; font-size: 14px;">
                         ${entry.message}
                     </div>
+                    ${isPending ? `
+                        <div style="margin-top: 8px; padding: 8px; background: #e7f3ff; border-left: 3px solid #0696D7; border-radius: 4px;">
+                            <div style="font-size: 12px; color: #0077B6;">
+                                ⏳ Processing... This entry will update automatically when complete.
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${entry.details?.helpfulTip ? `
+                        <div style="margin-top: 10px; padding: 10px; background: ${entry.status === 'warning' ? '#fff3cd' : '#f8d7da'}; border-left: 3px solid ${entry.status === 'warning' ? '#ffc107' : '#dc3545'}; border-radius: 4px;">
+                            <div style="font-size: 13px; color: #856404; font-weight: 500;">
+                                ${entry.details.helpfulTip}
+                            </div>
+                            ${entry.details.errorCode === 'C4R' && entry.details.statusCode === 403 ? `
+                                <div style="margin-top: 8px; font-size: 12px; color: #856404;">
+                                    <strong>Required:</strong> "Cloud Models for Revit" service<br>
+                                    <strong>Affects:</strong> Single-user RCM files only (C4R/workshared files work normally)<br>
+                                    <strong>Solution:</strong> Autodesk Account Admin must enable this service for the user
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
                     ${entry.details && Object.keys(entry.details).length > 0 ? `
                         <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
                             <details style="font-size: 12px; color: #666;">
-                                <summary style="cursor: pointer; user-select: none;">Details</summary>
+                                <summary style="cursor: pointer; user-select: none;">Technical Details</summary>
                                 <pre style="margin-top: 8px; background: #f8f9fa; padding: 8px; border-radius: 4px; overflow-x: auto; font-size: 11px;">${JSON.stringify(entry.details, null, 2)}</pre>
                             </details>
                         </div>
@@ -1914,6 +2177,28 @@ async function refreshPublishingHistory() {
         
         html += '</div>';
         contentDiv.innerHTML = html;
+        
+        // Check for pending entries
+        const hasPendingEntries = allHistory.some(entry => 
+            entry.status === 'pending' || 
+            entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully')
+        );
+        
+        console.log(`[Auto-refresh] Has pending entries: ${hasPendingEntries}`);
+        
+        // Update count span with refresh indicator if pending
+        if (hasPendingEntries) {
+            countSpan.textContent = `${allHistory.length} record${allHistory.length !== 1 ? 's' : ''} (${localHistory.length} manual, ${firestoreHistory.length} scheduled) - Auto-refreshing...`;
+        } else {
+            countSpan.textContent = `${allHistory.length} record${allHistory.length !== 1 ? 's' : ''} (${localHistory.length} manual, ${firestoreHistory.length} scheduled)`;
+            // Stop auto-refresh if no pending entries
+            if (historyRefreshInterval && !hasPendingEntries) {
+                console.log('[Auto-refresh] No pending entries, stopping auto-refresh');
+                clearInterval(historyRefreshInterval);
+                historyRefreshInterval = null;
+            }
+        }
+        
     } catch (error) {
         console.error('Error loading publishing history:', error);
         document.getElementById('publishingHistoryContent').innerHTML = 
