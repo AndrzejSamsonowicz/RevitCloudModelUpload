@@ -78,11 +78,11 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/register', (req, res) => {
-    res.sendFile(path.join(__dirname, 'register.html'));
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
 app.get('/reset-password', (req, res) => {
-    res.sendFile(path.join(__dirname, 'reset-password.html'));
+    res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
 });
 
 app.get('/purchase', (req, res) => {
