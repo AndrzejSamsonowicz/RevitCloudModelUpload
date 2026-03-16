@@ -277,23 +277,19 @@ router.post('/resend-verification', async (req, res) => {
             return res.status(400).json({ error: 'Email already verified' });
         }
         
-        // Get user document
+        // Get user document (or create if doesn't exist)
         const userDoc = await getDb().collection('users').doc(userRecord.uid).get();
-        
-        if (!userDoc.exists) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const userData = userDoc.data();
         
         // Generate new verification token
         const verificationToken = crypto.randomBytes(32).toString('hex');
         
-        // Update token in Firestore
-        await getDb().collection('users').doc(userRecord.uid).update({
+        // Store/update token in Firestore (create document if it doesn't exist)
+        await getDb().collection('users').doc(userRecord.uid).set({
+            email: email, // Ensure email is stored
             verificationToken: verificationToken,
-            verificationResent: admin.firestore.FieldValue.serverTimestamp()
-        });
+            verificationResent: admin.firestore.FieldValue.serverTimestamp(),
+            emailVerified: false
+        }, { merge: true });
         
         // Send verification email
         let emailSent = false;
@@ -357,12 +353,13 @@ router.post('/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const resetExpiry = Date.now() + 3600000; // 1 hour from now
         
-        // Store reset token in Firestore
-        await getDb().collection('users').doc(userRecord.uid).update({
+        // Store reset token in Firestore (create document if it doesn't exist)
+        await getDb().collection('users').doc(userRecord.uid).set({
+            email: email, // Ensure email is stored
             passwordResetToken: resetToken,
             passwordResetExpiry: resetExpiry,
             passwordResetRequestedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
         
         // Build reset URL
         const resetUrl = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password.html?token=${resetToken}`;
