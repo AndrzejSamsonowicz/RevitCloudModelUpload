@@ -29,20 +29,26 @@ async function decryptUserCredentials(userId) {
         return null;
     }
     
-    const algorithm = 'aes-256-cbc';
-    const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
-    const iv = Buffer.from(userData.encryptionIV, 'hex');
-    
-    const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
-    const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
-    
-    let clientId = decipherClientId.update(userData.encryptedClientId, 'hex', 'utf8');
-    clientId += decipherClientId.final('utf8');
-    
-    let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
-    clientSecret += decipherClientSecret.final('utf8');
-    
-    return { clientId, clientSecret };
+    try {
+        const algorithm = 'aes-256-cbc';
+        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+        const iv = Buffer.from(userData.encryptionIV, 'hex');
+        
+        const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
+        const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
+        
+        let clientId = decipherClientId.update(userData.encryptedClientId, 'hex', 'utf8');
+        clientId += decipherClientId.final('utf8');
+        
+        let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
+        clientSecret += decipherClientSecret.final('utf8');
+        
+        return { clientId, clientSecret };
+    } catch (error) {
+        console.error(`Failed to decrypt credentials for user ${userId}:`, error.message);
+        console.log('Returning null - user will need to re-authenticate');
+        return null;
+    }
 }
 
 /**

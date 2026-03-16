@@ -34,11 +34,19 @@ router.get('/login', async (req, res) => {
         const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
         const firebaseUserId = decodedToken.uid;
         
-        // Get user's decrypted APS credentials
-        const credentials = await decryptUserCredentials(firebaseUserId);
+        // Get user's decrypted APS credentials or fall back to default from .env
+        let credentials = await decryptUserCredentials(firebaseUserId);
         
         if (!credentials) {
-            return res.status(400).send('Please configure your APS credentials in Settings first');
+            console.log('No user-specific credentials found, using default APS credentials from .env');
+            credentials = {
+                clientId: process.env.APS_CLIENT_ID,
+                clientSecret: process.env.APS_CLIENT_SECRET
+            };
+        }
+        
+        if (!credentials.clientId || !credentials.clientSecret) {
+            return res.status(400).send('APS credentials not configured. Please set APS_CLIENT_ID and APS_CLIENT_SECRET in .env');
         }
         
         const state = Math.random().toString(36).substring(7);
