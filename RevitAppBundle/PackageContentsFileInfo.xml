@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage
+    SchemaVersion="1.0"
+    AutodeskProduct="Revit"
+    ProductType="Application"
+    Name="RevitFileInfoExtractor"
+    AppVersion="1.0.0"
+    Description="Extracts Revit file version and metadata using BasicFileInfo API"
+    Author="APS Design Automation"
+    ProductCode="{B8F8F2A2-4D5E-4C3B-9E1A-7F8E9D6C5B4A}"
+    UpgradeCode="{C9G9G3B3-5E6F-5D4C-0F2B-8G9F0E7D6C5B}"
+    SupportedLocales="Enu">
+  <CompanyDetails
+    Name="Autodesk"
+    Phone=" "
+    Url=" "
+    Email=" " />
+  <RuntimeRequirements
+    SeriesMin="R2024"
+    SeriesMax="R2026"
+    Platform="Revit"
+    OS="Win64" />
+  <Components Description="Revit File Info Extractor">
+    <RuntimeRequirements
+      SeriesMin="R2024"
+      SeriesMax="R2026"
+      Platform="Revit"
+      OS="Win64" />
+    <ComponentEntry
+      AppName="RevitFileInfoExtractor"
+      ModuleName="./Contents/RevitFileInfoExtractor.dll"
+      AppDescription="Extracts file version using BasicFileInfo"
+      LoadOnRevitStartup="False"
+      LoadOnCommandInvocation="False" />
+  </Components>
+</ApplicationPackage>

@@ -441,6 +441,341 @@ class DesignAutomationService {
             throw error;
         }
     }
+
+    /**
+     * Detect Revit file version using BasicFileInfo AppBundle
+     * Creates a WorkItem that extracts file info without opening the file
+     */
+    async detectFileVersion(itemId, projectId, fileName, userCredentials = null) {
+        try {
+            console.log(`[Version Detection] Starting detection for: ${fileName}`);
+            
+            // Set user credentials if provided
+            if (userCredentials) {
+                this.clientId = userCredentials.clientId;
+                this.clientSecret = userCredentials.clientSecret;
+            }
+
+            // Get user token for downloading the file
+            const token = await this.getAccessToken();
+            
+            // Construct download URL for the Revit file
+            const downloadUrl = `https://developer.api.autodesk.com/data/v1/projects/${projectId}/items/${itemId}/versions/1`;
+            
+            // Create WorkItem payload
+            const activityId = `${this.nickname}.DetectRevitVersionActivity+2026`;
+            const workItemPayload = {
+                activityId,
+                arguments: {
+                    inputFile: {
+                        url: downloadUrl,
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    },
+                    result: {
+                        verb: 'put',
+                        url: `https://developer.api.autodesk.com/oss/v2/buckets/revitpublisher-workitems/objects/${itemId}_version.json`,
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    }
+                }
+            };
+
+            console.log(`[Version Detection] Creating WorkItem with Activity: ${activityId}`);
+            
+            const headers = await this.getHeaders();
+            const response = await axios.post(
+                `${DESIGN_AUTOMATION_BASE}/workitems`,
+                workItemPayload,
+                { headers }
+            );
+
+            console.log(`[Version Detection] WorkItem created: ${response.data.id}`);
+            console.log(`[Version Detection] Status: ${response.data.status}`);
+
+            return {
+                workItemId: response.data.id,
+                status: response.data.status,
+                activityId,
+                fileName
+            };
+        } catch (error) {
+            console.error('[Version Detection Error]:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Get version detection result from completed WorkItem
+     * Downloads and parses the result.json file
+     */
+    async getVersionDetectionResult(workItemId, userCredentials = null) {
+        try {
+            console.log(`[Get Version Result] Checking WorkItem: ${workItemId}`);
+            
+            // Set user credentials if provided
+            if (userCredentials) {
+                this.clientId = userCredentials.clientId;
+                this.clientSecret = userCredentials.clientSecret;
+            }
+
+            // Get WorkItem status
+            const headers = await this.getHeaders();
+            const response = await axios.get(
+                `${DESIGN_AUTOMATION_BASE}/workitems/${workItemId}`,
+                { headers }
+            );
+
+            const workItem = response.data;
+            console.log(`[Get Version Result] WorkItem status: ${workItem.status}`);
+
+            // If not completed yet, return status
+            if (workItem.status !== 'success' && workItem.status !== 'failedInstructions') {
+                return {
+                    status: workItem.status,
+                    completed: false,
+                    workItemId
+                };
+            }
+
+            // If failed, return error
+            if (workItem.status === 'failedInstructions' || workItem.status === 'failed') {
+                return {
+                    status: 'failed',
+                    completed: true,
+                    error: 'Version detection failed',
+                    reportUrl: workItem.reportUrl,
+                    workItemId
+                };
+            }
+
+            // Download result.json
+            const resultUrl = workItem.arguments?.result?.url;
+            if (!resultUrl) {
+                throw new Error('No result URL found in WorkItem');
+            }
+
+            console.log('[Get Version Result] Downloading result.json...');
+            const token = await this.getAccessToken();
+            const resultResponse = await axios.get(resultUrl, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            const versionInfo = resultResponse.data;
+            console.log('[Get Version Result] Version detected:', versionInfo.format);
+
+            return {
+                status: 'success',
+                completed: true,
+                versionInfo,
+                workItemId
+            };
+        } catch (error) {
+            console.error('[Get Version Result Error]:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Upload RevitFileInfoExtractor AppBundle (version detection)
+     * This should be called once during setup
+     */
+    async uploadFileInfoAppBundle(bundlePath, userCredentials = null) {
+        try {
+            console.log('[Upload FileInfo AppBundle] Starting upload...');
+            
+            // Set user credentials if provided
+            if (userCredentials) {
+                this.clientId = userCredentials.clientId;
+                this.clientSecret = userCredentials.clientSecret;
+            }
+
+            const appBundleId = 'RevitFileInfoExtractor';
+            const alias = 'production';
+            const engine = 'Autodesk.Revit+2026';
+
+            // Create AppBundle
+            const headers = await this.getHeaders();
+            const appBundleSpec = {
+                id: appBundleId,
+                engine,
+                description: 'Detects Revit file version using BasicFileInfo API'
+            };
+
+            console.log('[Upload FileInfo AppBundle] Creating AppBundle...');
+            let appBundleResponse;
+            try {
+                appBundleResponse = await axios.post(
+                    `${DESIGN_AUTOMATION_BASE}/appbundles`,
+                    appBundleSpec,
+                    { headers }
+                );
+            } catch (error) {
+                if (error.response?.status === 409) {
+                    console.log('[Upload FileInfo AppBundle] AppBundle exists, creating new version...');
+                    appBundleResponse = await axios.post(
+                        `${DESIGN_AUTOMATION_BASE}/appbundles/${appBundleId}/versions`,
+                        { 
+                            engine,
+                            description: 'Detects Revit file version using BasicFileInfo API'
+                        },
+                        { headers }
+                    );
+                } else {
+                    throw error;
+                }
+            }
+
+            // Upload bundle file
+            const uploadUrl = appBundleResponse.data.uploadParameters.endpointURL;
+            const formData = appBundleResponse.data.uploadParameters.formData;
+
+            console.log('[Upload FileInfo AppBundle] Uploading ZIP file...');
+            const fs = require('fs');
+            const FormData = require('form-data');
+            const form = new FormData();
+
+            // Append form data fields
+            Object.keys(formData).forEach(key => {
+                form.append(key, formData[key]);
+            });
+
+            // Append file
+            form.append('file', fs.createReadStream(bundlePath));
+
+            await axios.post(uploadUrl, form, {
+                headers: form.getHeaders()
+            });
+
+            console.log('[Upload FileInfo AppBundle] Creating alias...');
+            try {
+                await axios.post(
+                    `${DESIGN_AUTOMATION_BASE}/appbundles/${appBundleId}/aliases`,
+                    { id: alias, version: appBundleResponse.data.version },
+                    { headers }
+                );
+            } catch (error) {
+                if (error.response?.status === 409) {
+                    await axios.patch(
+                        `${DESIGN_AUTOMATION_BASE}/appbundles/${appBundleId}/aliases/${alias}`,
+                        { version: appBundleResponse.data.version },
+                        { headers }
+                    );
+                } else {
+                    throw error;
+                }
+            }
+
+            console.log('[Upload FileInfo AppBundle] ✓ AppBundle uploaded successfully');
+
+            return {
+                id: `${this.nickname}.${appBundleId}+${alias}`,
+                version: appBundleResponse.data.version
+            };
+        } catch (error) {
+            console.error('[Upload FileInfo AppBundle Error]:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Create DetectRevitVersion Activity
+     * Uses the RevitFileInfoExtractor AppBundle
+     */
+    async createVersionDetectionActivity(userCredentials = null) {
+        try {
+            console.log('[Create Version Detection Activity] Starting...');
+            
+            // Set user credentials if provided
+            if (userCredentials) {
+                this.clientId = userCredentials.clientId;
+                this.clientSecret = userCredentials.clientSecret;
+            }
+
+            const activityId = 'DetectRevitVersionActivity';
+            const alias = '2026';
+            const engine = 'Autodesk.Revit+2026';
+            const appBundleId = `${this.nickname}.RevitFileInfoExtractor+production`;
+
+            const activitySpec = {
+                id: activityId,
+                commandLine: [`$(engine.path)\\\\revitcoreconsole.exe /i $(args[inputFile].path) /al $(appbundles[RevitFileInfoExtractor].path)`],
+                parameters: {
+                    inputFile: {
+                        verb: 'get',
+                        description: 'Input Revit file',
+                        required: true,
+                        localName: 'input.rvt'
+                    },
+                    result: {
+                        verb: 'put',
+                        description: 'Version detection result JSON',
+                        required: true,
+                        localName: 'result.json'
+                    }
+                },
+                engine,
+                appbundles: [appBundleId],
+                description: 'Detects Revit file version using BasicFileInfo API'
+            };
+
+            const headers = await this.getHeaders();
+            console.log('[Create Version Detection Activity] Creating Activity...');
+            
+            let activityResponse;
+            try {
+                activityResponse = await axios.post(
+                    `${DESIGN_AUTOMATION_BASE}/activities`,
+                    activitySpec,
+                    { headers }
+                );
+            } catch (error) {
+                if (error.response?.status === 409) {
+                    console.log('[Create Version Detection Activity] Activity exists, creating new version...');
+                    activityResponse = await axios.post(
+                        `${DESIGN_AUTOMATION_BASE}/activities/${activityId}/versions`,
+                        activitySpec,
+                        { headers }
+                    );
+                } else {
+                    throw error;
+                }
+            }
+
+            console.log('[Create Version Detection Activity] Creating alias...');
+            try {
+                await axios.post(
+                    `${DESIGN_AUTOMATION_BASE}/activities/${activityId}/aliases`,
+                    { id: alias, version: activityResponse.data.version },
+                    { headers }
+                );
+            } catch (error) {
+                if (error.response?.status === 409) {
+                    await axios.patch(
+                        `${DESIGN_AUTOMATION_BASE}/activities/${activityId}/aliases/${alias}`,
+                        { version: activityResponse.data.version },
+                        { headers }
+                    );
+                } else {
+                    throw error;
+                }
+            }
+
+            console.log('[Create Version Detection Activity] ✓ Activity created successfully');
+
+            return {
+                id: `${this.nickname}.${activityId}+${alias}`,
+                version: activityResponse.data.version
+            };
+        } catch (error) {
+            console.error('[Create Version Detection Activity Error]:', error.response?.data || error.message);
+            throw error;
+        }
+    }
 }
 
 module.exports = new DesignAutomationService();

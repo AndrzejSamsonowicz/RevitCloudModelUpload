@@ -2,6 +2,35 @@ let sessionId = null;
 let userId = null; // Consistent APS user ID for Firestore
 let historyRefreshInterval = null; // Auto-refresh interval for pending entries
 
+/**
+ * Detect Revit version from filename OR file metadata
+ * Priority: 1) File metadata (revitVersion field), 2) Filename pattern
+ * Returns: '2018', '2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026', or null if not detected
+ */
+function detectRevitVersion(fileName, fileMetadata) {
+    // First priority: Check if we have it from API metadata
+    if (fileMetadata && fileMetadata.revitVersion) {
+        // Try to extract year from version string (e.g., "2022", "Revit 2023", "R2024")
+        const match = fileMetadata.revitVersion.match(/20(1[89]|2[0-6])/); // 2018-2026
+        if (match) {
+            console.log(`✓ Detected Revit ${match[0]} from file metadata for: ${fileName}`);
+            return match[0];
+        }
+    }
+    
+    // Second priority: Try to parse from filename (fallback)
+    if (fileName) {
+        const match = fileName.match(/20(1[89]|2[0-6])/); // 2018-2026
+        if (match) {
+            console.log(`⚠ Detected Revit ${match[0]} from filename for: ${fileName} (metadata not available)`);
+            return match[0];
+        }
+    }
+    
+    console.log(`✗ No Revit version detected for: ${fileName}, will default to R2026 Activity`);
+    return null; // Not detected, will use default
+}
+
 // Global interval ID for time updates
 let timeSincePublishInterval = null;
 
@@ -234,7 +263,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                         // Both Firebase and Autodesk OAuth authenticated
                         document.body.style.visibility = 'visible';
                         updateAuthUI(true);
-                        await autoUploadAppBundle();
+                        // Note: Auto-upload removed - Activities are created automatically during publish workflow
                     } else {
                         // Firebase authenticated but OAuth session invalid
                         sessionStorage.removeItem('aps_session');
@@ -524,6 +553,111 @@ async function createActivity() {
     }
 }
 
+/**
+ * Check which Activities exist for current user (Revit 2024, 2025, 2026)
+ */
+async function checkActivities() {
+    if (!sessionId) {
+        showMessage('setupMessage', 'Please login first', 'error');
+        return;
+    }
+
+    try {
+        showMessage('setupMessage', 'Checking available Activities...', 'info');
+        document.getElementById('setupLog').classList.remove('hidden');
+        addLog('Checking Activities for Revit 2024, 2025, 2026...', '', 'setupLog');
+
+        const response = await fetch(`/api/design-automation/activities/check?sessionId=${sessionId}`);
+        const data = await response.json();
+
+        if (response.ok) {
+            const { activities, summary, recommendation, nickname } = data;
+            
+            addLog(`Nickname: ${nickname}`, '', 'setupLog');
+            addLog('', '', 'setupLog');
+            
+            // Display status for each version
+            ['2024', '2025', '2026'].forEach(version => {
+                const status = activities[version];
+                if (status.exists) {
+                    addLog(`✓ Revit ${version}: Activity exists (${status.activityId})`, 'success', 'setupLog');
+                } else {
+                    addLog(`✗ Revit ${version}: Activity missing`, 'error', 'setupLog');
+                }
+            });
+            
+            addLog('', '', 'setupLog');
+            addLog(`Summary: ${summary.existing}/${summary.total} Activities available`, '', 'setupLog');
+            
+            if (summary.missing > 0) {
+                showMessage('setupMessage', `Missing Activities for Revit ${summary.missingVersions.join(', ')}`, 'warning');
+                addLog(`⚠️  ${recommendation}`, 'warning', 'setupLog');
+            } else {
+                showMessage('setupMessage', '✓ All Revit versions (2024-2026) are supported', 'success');
+            }
+        } else {
+            showMessage('setupMessage', `Error: ${data.error}`, 'error');
+            addLog(`✗ ${data.error}`, 'error', 'setupLog');
+        }
+    } catch (error) {
+        showMessage('setupMessage', `Request failed: ${error.message}`, 'error');
+        addLog(`✗ Request failed: ${error.message}`, 'error', 'setupLog');
+    }
+}
+
+/**
+ * Create Activities for all Revit versions (2024, 2025, 2026)
+ */
+async function createAllActivities() {
+    if (!sessionId) {
+        showMessage('setupMessage', 'Please login first', 'error');
+        return;
+    }
+
+    try {
+        showMessage('setupMessage', 'Creating Activities for all Revit versions...', 'info');
+        document.getElementById('setupLog').classList.remove('hidden');
+        addLog('Creating Activities for Revit 2024, 2025, 2026...', '', 'setupLog');
+
+        const response = await fetch('/api/design-automation/activities/create-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const { results, summary } = data;
+            
+            // Display results for each version
+            results.forEach(result => {
+                if (result.success) {
+                    addLog(`✓ Revit ${result.version}: ${result.message}`, 'success', 'setupLog');
+                } else {
+                    addLog(`✗ Revit ${result.version}: ${result.error}`, 'error', 'setupLog');
+                }
+            });
+            
+            addLog('', '', 'setupLog');
+            addLog(`Summary: ${summary.created}/${summary.total} Activities created`, '', 'setupLog');
+            
+            if (summary.created === summary.total) {
+                showMessage('setupMessage', '✓ All Activities created successfully!', 'success');
+            } else if (summary.created > 0) {
+                showMessage('setupMessage', `⚠️  Created ${summary.created} of ${summary.total} Activities`, 'warning');
+            } else {
+                showMessage('setupMessage', '✗ Failed to create Activities', 'error');
+            }
+        } else {
+            showMessage('setupMessage', `Error: ${data.error}`, 'error');
+            addLog(`✗ ${data.error}`, 'error', 'setupLog');
+        }
+    } catch (error) {
+        showMessage('setupMessage', `Request failed: ${error.message}`, 'error');
+        addLog(`✗ Request failed: ${error.message}`, 'error', 'setupLog');
+    }
+}
+
 // Publish function
 async function publishModel() {
     if (!sessionId) {
@@ -540,7 +674,8 @@ async function publishModel() {
             modelGuid: item.dataset.modelGuid,
             fileName: item.dataset.fileName,
             itemId: item.dataset.itemId,
-            region: item.dataset.region || 'US'
+            region: item.dataset.region || 'US',
+            revitVersion: item.dataset.revitVersion || '2026' // Auto-detected or default
         };
     });
 
@@ -552,6 +687,17 @@ async function publishModel() {
     try {
         showMessage('publishMessage', `Publishing ${selectedFiles.length} model(s) directly to cloud...`, 'info');
         addLog(`Starting batch publish for ${selectedFiles.length} model(s)...`, 'info');
+        
+        // Show version detection summary
+        const versionCounts = {};
+        selectedFiles.forEach(f => {
+            const v = f.revitVersion || '2026';
+            versionCounts[v] = (versionCounts[v] || 0) + 1;
+        });
+        const versionSummary = Object.entries(versionCounts)
+            .map(([v, count]) => `Revit ${v} (${count})`)
+            .join(', ');
+        addLog(`Versions detected: ${versionSummary}`, 'info');
 
         let successCount = 0;
         let failCount = 0;
@@ -559,7 +705,9 @@ async function publishModel() {
         // Process files sequentially using PublishModel API
         for (let i = 0; i < selectedFiles.length; i++) {
             const file = selectedFiles[i];
+            const version = file.revitVersion || '2026';
             addLog(`\n[${i + 1}/${selectedFiles.length}] Publishing: ${file.fileName}`, 'info');
+            addLog(`  Using Revit ${version} Activity`, 'info');
 
             const response = await fetch(`/api/data-management/publish/${encodeURIComponent(file.itemId)}`, {
                 method: 'POST',
@@ -572,7 +720,8 @@ async function publishModel() {
                     projectGuid: file.projectGuid,
                     modelGuid: file.modelGuid,
                     fileName: file.fileName,
-                    region: file.region
+                    region: file.region,
+                    revitVersion: file.revitVersion // Pass auto-detected version
                 })
             });
 
@@ -1366,6 +1515,16 @@ function renderFilesList() {
         tr.dataset.fileName = file.name;
         tr.dataset.index = file.index;
         tr.dataset.region = window.selectedHubRegion || 'US';
+        
+        // Auto-detect Revit version from file metadata or filename
+        const detectedVersion = detectRevitVersion(file.name, file);
+        tr.dataset.revitVersion = detectedVersion || '2026'; // Default to 2026 if not detected
+        
+        // Store the detected/default version for logging
+        if (detectedVersion) {
+            console.log(`File: ${file.name} → Revit ${detectedVersion}`);
+        }
+        
         tr.style.borderBottom = '1px solid #eee';
         tr.style.cursor = 'pointer';
         
