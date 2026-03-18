@@ -2334,9 +2334,22 @@ async function refreshPublishingHistory() {
             // File type badge for both manual and scheduled publishes
             let fileTypeBadge = '';
             if (entry.details) {
-                if (entry.details.isRCM || entry.isRCM) {
+                // Check explicit flags first
+                let isRCM = entry.details.isRCM || entry.isRCM;
+                let isC4R = entry.details.isC4R || entry.isC4R;
+                
+                // Fallback: detect from workItemId/commandId for old entries without flags
+                if (!isRCM && !isC4R) {
+                    if (entry.details.workItemId) {
+                        isRCM = true;
+                    } else if (entry.details.commandId) {
+                        isC4R = true;
+                    }
+                }
+                
+                if (isRCM) {
                     fileTypeBadge = '<span style="background: #6f42c1; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">RCM</span>';
-                } else if (entry.details.isC4R || entry.isC4R) {
+                } else if (isC4R) {
                     fileTypeBadge = '<span style="background: #17a2b8; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">C4R</span>';
                 }
             }
@@ -2494,6 +2507,15 @@ async function downloadHistoryReport() {
                 fileType = 'RCM';
             } else if (entry.details?.isC4R || entry.isC4R) {
                 fileType = 'C4R';
+            }
+            
+            // Fallback: detect from workItemId/commandId for old entries without flags
+            if (!fileType && entry.details) {
+                if (entry.details.workItemId) {
+                    fileType = 'RCM';
+                } else if (entry.details.commandId) {
+                    fileType = 'C4R';
+                }
             }
             
             const fileName = `"${(entry.fileName || '').replace(/"/g, '""')}"`;
