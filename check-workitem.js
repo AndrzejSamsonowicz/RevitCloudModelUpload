@@ -1,4 +1,5 @@
 // Quick diagnostic script to check WorkItem status
+require('dotenv').config();
 const axios = require('axios');
 
 const workItemId = process.argv[2];
