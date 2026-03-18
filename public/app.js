@@ -1942,6 +1942,7 @@ async function savePublishingSchedules() {
             const enhanced = {
                 ...schedule,
                 projectId: selectedProjectId, // Add projectId (e.g., b.xxx format)
+                projectName: selectedProjectName, // Add project name for display
                 projectGuid: row.dataset.projectGuid,
                 modelGuid: row.dataset.modelGuid,
                 region: row.dataset.region || 'US',
