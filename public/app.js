@@ -2248,7 +2248,7 @@ async function refreshPublishingHistory() {
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
-                        projectName: data.projectName || (data.source === 'manual' ? 'Manual Publish' : 'Scheduled Publish'),
+                        projectName: data.projectName || 'Unknown Project',
                         status: displayStatus,
                         message: displayMessage,
                         details: {
@@ -2466,7 +2466,7 @@ async function downloadHistoryReport() {
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
-                        projectName: data.projectName || (data.source === 'manual' ? 'Manual Publish' : 'Scheduled Publish'),
+                        projectName: data.projectName || 'Unknown Project',
                         status: data.status || 'info',
                         message: data.message,
                         details: {
