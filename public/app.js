@@ -2453,7 +2453,7 @@ async function downloadHistoryReport() {
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
-                        projectName: data.source === 'manual' ? (data.projectName || 'Manual Publish') : 'Scheduled Publish',
+                        projectName: data.projectName || (data.source === 'manual' ? 'Manual Publish' : 'Scheduled Publish'),
                         status: data.status || 'info',
                         message: data.message,
                         details: {
@@ -2483,12 +2483,16 @@ async function downloadHistoryReport() {
         const csvRows = [headers.join(',')];
         
         allHistory.forEach(entry => {
-            const publishingMethod = entry.details?.source === 'manual' ? 'Manual' : 'Scheduled';
+            // Determine publishing method - manual publishes from localStorage won't have details.source
+            const publishingMethod = (entry.details?.source === 'manual' || 
+                                     (!entry.details?.source && entry.details?.commandId)) 
+                                    ? 'Manual' : 'Scheduled';
             
+            // File type detection - check both entry.details and top-level for localStorage entries
             let fileType = '';
-            if (entry.details?.isRCM) {
+            if (entry.details?.isRCM || entry.isRCM) {
                 fileType = 'RCM';
-            } else if (entry.details?.isC4R) {
+            } else if (entry.details?.isC4R || entry.isC4R) {
                 fileType = 'C4R';
             }
             
