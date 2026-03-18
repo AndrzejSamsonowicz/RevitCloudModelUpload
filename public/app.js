@@ -741,18 +741,25 @@ async function publishModel() {
                 }
                 successCount++;
                 
+                // Determine file type based on response
+                const isRCM = !!data.workItemId; // RCM files use Design Automation
+                const isC4R = !!data.commandId;  // C4R files use PublishModel API
+                
                 // Save to publishing history
                 saveToPublishingHistory(
                     file.fileName,
                     selectedProjectName || 'Unknown Project',
                     'success',
-                    data.workItemId ? 'Design Automation WorkItem created' : 'Publish command initiated successfully',
+                    data.workItemId ? 'Publishing RCM file via Design Automation...' : 'Publishing C4R file...',
                     {
                         workItemId: data.workItemId,
                         commandId: data.commandId,
                         status: data.status,
                         itemId: file.itemId,
-                        projectId: selectedProjectId
+                        projectId: selectedProjectId,
+                        fileType: 'versions:autodesk.bim360:C4RModel',
+                        isRCM: isRCM,
+                        isC4R: isC4R
                     }
                 );
             } else {
@@ -763,6 +770,8 @@ async function publishModel() {
                 let errorType = 'error';
                 let errorMessage = `Publish failed: ${data.error}`;
                 let helpfulTip = '';
+                let isRCM = false;
+                let isC4R = false;
                 
                 // Check for specific error patterns
                 if (data.details) {
@@ -771,6 +780,7 @@ async function publishModel() {
                         errorType = 'warning';
                         helpfulTip = '💡 This user may not have "Cloud Models for Revit" service enabled. Contact your Autodesk Account Admin to grant access.';
                         addLog(`  ⚠ ${helpfulTip}`, 'warning');
+                        isRCM = true; // This error specifically indicates RCM file
                     }
                     // No unpublished changes
                     else if (data.error.includes('No unpublished changes')) {
@@ -792,7 +802,10 @@ async function publishModel() {
                         errorCode: data.details?.errorCode,
                         statusCode: data.details?.statusCode,
                         helpfulTip: helpfulTip,
-                        originalError: data.details?.originalError
+                        originalError: data.details?.originalError,
+                        fileType: 'versions:autodesk.bim360:C4RModel',
+                        isRCM: isRCM,
+                        isC4R: isC4R
                     }
                 );
             }
@@ -2113,8 +2126,8 @@ async function saveToPublishingHistory(fileName, projectName, status, message, d
                     commandId: details.commandId || null,
                     itemId: details.itemId || null,
                     projectId: details.projectId || null,
-                    isRCM: false,
-                    isC4R: false,
+                    isRCM: details.isRCM || false,
+                    isC4R: details.isC4R || false,
                     source: 'manual' // Mark as manual publish
                 });
                 console.log('Successfully saved to Firestore');
@@ -2414,6 +2427,111 @@ async function refreshPublishingHistory() {
         console.error('Error loading publishing history:', error);
         document.getElementById('publishingHistoryContent').innerHTML = 
             '<div style="text-align: center; color: #dc3545; padding: 20px;">Error loading history</div>';
+    }
+}
+
+async function downloadHistoryReport() {
+    try {
+        console.log('Generating publishing history CSV report...');
+        
+        // Get manual publishes from localStorage
+        const localHistory = JSON.parse(localStorage.getItem('publishingHistory') || '[]');
+        
+        // Get scheduled publishes from Firestore
+        let firestoreHistory = [];
+        
+        if (typeof firebase !== 'undefined' && userId && typeof firebase.firestore === 'function') {
+            try {
+                const db = firebase.firestore();
+                const logsSnapshot = await db.collection('publishingLogs')
+                    .where('userId', '==', userId)
+                    .limit(1000)
+                    .get();
+                
+                firestoreHistory = logsSnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        timestamp: data.actualTime,
+                        fileName: data.fileName,
+                        projectName: data.source === 'manual' ? (data.projectName || 'Manual Publish') : 'Scheduled Publish',
+                        status: data.status || 'info',
+                        message: data.message,
+                        details: {
+                            source: data.source || 'scheduled',
+                            isRCM: data.isRCM,
+                            isC4R: data.isC4R
+                        }
+                    };
+                });
+            } catch (error) {
+                console.error('Error fetching Firestore history for CSV:', error);
+            }
+        }
+        
+        // Combine and sort by timestamp
+        const allHistory = [...localHistory, ...firestoreHistory].sort((a, b) => {
+            return new Date(b.timestamp) - new Date(a.timestamp);
+        });
+        
+        if (allHistory.length === 0) {
+            showToast('No Data', 'No publishing history to export', 'warning');
+            return;
+        }
+        
+        // Create CSV content
+        const headers = ['File Name', 'Publishing Method', 'File Type', 'Project Name', 'Date', 'Status', 'Message'];
+        const csvRows = [headers.join(',')];
+        
+        allHistory.forEach(entry => {
+            const publishingMethod = entry.details?.source === 'manual' ? 'Manual' : 'Scheduled';
+            
+            let fileType = '';
+            if (entry.details?.isRCM) {
+                fileType = 'RCM';
+            } else if (entry.details?.isC4R) {
+                fileType = 'C4R';
+            }
+            
+            const fileName = `"${(entry.fileName || '').replace(/"/g, '""')}"`;
+            const projectName = `"${(entry.projectName || '').replace(/"/g, '""')}"`;
+            const date = new Date(entry.timestamp).toLocaleString();
+            const status = entry.status || '';
+            const message = `"${(entry.message || '').replace(/"/g, '""')}"`;
+            
+            csvRows.push([
+                fileName,
+                publishingMethod,
+                fileType,
+                projectName,
+                date,
+                status,
+                message
+            ].join(','));
+        });
+        
+        const csvContent = csvRows.join('\n');
+        
+        // Create blob and download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const filename = `publishing-history-${timestamp}.csv`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        console.log(`CSV report downloaded: ${filename} (${allHistory.length} records)`);
+        showToast('Export Complete', `Downloaded ${allHistory.length} records to ${filename}`, 'success');
+        
+    } catch (error) {
+        console.error('Error generating CSV report:', error);
+        showToast('Export Failed', `Failed to generate report: ${error.message}`, 'error');
     }
 }
 
