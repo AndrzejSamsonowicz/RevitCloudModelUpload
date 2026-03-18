@@ -2248,7 +2248,7 @@ async function refreshPublishingHistory() {
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
-                        projectName: data.source === 'manual' ? (data.projectName || 'Manual Publish') : 'Scheduled Publish',
+                        projectName: data.projectName || (data.source === 'manual' ? 'Manual Publish' : 'Scheduled Publish'),
                         status: displayStatus,
                         message: displayMessage,
                         details: {
@@ -2331,12 +2331,12 @@ async function refreshPublishingHistory() {
                 ? '<span style="background: #0696D7; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">SCHEDULED</span>'
                 : '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">MANUAL</span>';
             
-            // File type badge for scheduled publishes
+            // File type badge for both manual and scheduled publishes
             let fileTypeBadge = '';
-            if (isScheduled && entry.details) {
-                if (entry.details.isRCM) {
+            if (entry.details) {
+                if (entry.details.isRCM || entry.isRCM) {
                     fileTypeBadge = '<span style="background: #6f42c1; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">RCM</span>';
-                } else if (entry.details.isC4R) {
+                } else if (entry.details.isC4R || entry.isC4R) {
                     fileTypeBadge = '<span style="background: #17a2b8; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">C4R</span>';
                 }
             }

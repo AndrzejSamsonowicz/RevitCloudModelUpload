@@ -1,3 +1,7 @@
+/**
+ * Cloud Functions for Scheduled Publishing and WorkItem Status Checks
+ * Updated: 2026-03-16 - Using VM public IP for server communication
+ */
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
@@ -186,6 +190,8 @@ async function triggerPublishing(userId, schedule) {
       userId: userId,
       fileId: schedule.fileId,
       fileName: schedule.fileName,
+      projectName: schedule.projectName || 'Unknown Project',
+      projectId: schedule.projectId || null,
       fileType: schedule.extensionType || 'Unknown',
       isRCM: isRCM,
       isC4R: !isRCM && schedule.isCloudModel,
@@ -193,7 +199,8 @@ async function triggerPublishing(userId, schedule) {
       actualTime: new Date().toISOString(),
       status: 'pending', // Will be updated by webhook
       workItemId: workItemId,
-      message: isRCM ? 'Publishing RCM file via Design Automation...' : 'Publishing C4R file...'
+      message: isRCM ? 'Publishing RCM file via Design Automation...' : 'Publishing C4R file...',
+      source: 'scheduled'
     });
     
     return response.data;
@@ -223,6 +230,8 @@ async function triggerPublishing(userId, schedule) {
       userId: userId,
       fileId: schedule.fileId,
       fileName: schedule.fileName,
+      projectName: schedule.projectName || 'Unknown Project',
+      projectId: schedule.projectId || null,
       fileType: schedule.extensionType || 'Unknown',
       isRCM: fileIsRCM,
       isC4R: !fileIsRCM && schedule.isCloudModel,
@@ -233,7 +242,8 @@ async function triggerPublishing(userId, schedule) {
       error: errorMessage,
       helpfulTip: helpfulTip,
       originalError: error.message,
-      statusCode: error.response?.status
+      statusCode: error.response?.status,
+      source: 'scheduled'
     });
     
     throw error;
