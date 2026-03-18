@@ -472,6 +472,23 @@ router.post('/scheduled-publish', async (req, res, next) => {
         
         console.log(`WorkItem created for scheduled publish: ${result.workItemId}`);
         
+        // Start polling this WorkItem for status updates
+        if (global.workItemPoller) {
+            // Find the Firestore log ID for this workItem 
+            const logsSnapshot = await db.collection('publishingLogs')
+                .where('workItemId', '==', result.workItemId)
+                .limit(1)
+                .get();
+            
+            let logId = null;
+            if (!logsSnapshot.empty) {
+                logId = logsSnapshot.docs[0].id;
+            }
+            
+            global.workItemPoller.track(result.workItemId, logId, fileName);
+            console.log(`✓ WorkItem ${result.workItemId} added to poller`);
+        }
+        
         // Trigger PublishModel to make the model viewable
         // Use the projectId from schedule (already in b.xxx format)
         const projectIdForPublish = projectId || `b.${projectGuid}`;

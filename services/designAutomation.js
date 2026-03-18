@@ -398,13 +398,13 @@ class DesignAutomationService {
                     inputJson: {
                         url: `data:application/json,${JSON.stringify(inputJson)}`
                     },
-                    // Note: result parameter omitted - not needed for cloud model publish
                     // REQUIRED for Revit Cloud Model access - provides user authentication context
-                    adsk3LeggedToken: userToken,
-                    onComplete: {
-                        verb: 'post',
-                        url: callbackUrl
-                    }
+                    adsk3LeggedToken: userToken
+                },
+                // Callback when WorkItem completes (success or failure)
+                onComplete: {
+                    verb: 'post',
+                    url: callbackUrl
                 }
             };
 

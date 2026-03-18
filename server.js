@@ -3,6 +3,10 @@ const express = require('express');
 const path = require('path');
 const admin = require('firebase-admin');
 
+// Initialize services
+const designAutomation = require('./services/designAutomation');
+const WorkItemPoller = require('./services/workItemPoller');
+
 // Initialize routes
 const authRoutes = require('./routes/auth');
 const designAutomationRoutes = require('./routes/designAutomation');
@@ -43,6 +47,11 @@ try {
     console.error('✗ Failed to initialize Firebase Admin SDK:', error.message);
     console.warn('⚠ Authentication features will be disabled.');
 }
+
+// Initialize WorkItem Poller (for tracking scheduled publish WorkItems)
+const workItemPoller = new WorkItemPoller(designAutomation);
+global.workItemPoller = workItemPoller; // Make available globally
+console.log('✓ WorkItem Poller initialized');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
