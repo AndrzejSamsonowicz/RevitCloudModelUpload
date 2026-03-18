@@ -2100,14 +2100,14 @@ function showPublishingHistory() {
     modal.style.display = 'flex';
     refreshPublishingHistory();
     
-    // Start aggressive auto-refresh for pending entries (every 3 seconds)
+    // Start auto-refresh for pending entries (every 10 seconds to reduce flickering)
     if (historyRefreshInterval) {
         clearInterval(historyRefreshInterval);
     }
     historyRefreshInterval = setInterval(() => {
         console.log('[Auto-refresh] Checking for updates...');
         refreshPublishingHistory();
-    }, 3000); // Refresh every 3 seconds to catch updates quickly
+    }, 10000); // Refresh every 10 seconds (reduced from 3s to prevent flickering)
 }
 
 function closePublishingHistory() {
@@ -2189,6 +2189,16 @@ async function refreshPublishingHistory() {
                         enhancedDetails.helpfulTip = data.helpfulTip;
                     }
                     
+                    // Check if this is an old stuck entry (more than 10 minutes old)
+                    const entryAge = Date.now() - new Date(data.actualTime).getTime();
+                    const tenMinutes = 10 * 60 * 1000;
+                    
+                    // If entry is old and still has 'info' status, mark it as timeout
+                    if (displayStatus === 'info' && entryAge > tenMinutes) {
+                        displayStatus = 'warning';
+                        displayMessage = 'Scheduled publish timed out (no response from Design Automation)';
+                    }
+                    
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
@@ -2202,7 +2212,8 @@ async function refreshPublishingHistory() {
                             fileType: data.fileType,
                             isRCM: data.isRCM,
                             isC4R: data.isC4R,
-                            source: 'scheduled'
+                            source: 'scheduled',
+                            age: entryAge > tenMinutes ? 'timeout' : 'active'
                         }
                     };
                 });
@@ -2243,9 +2254,10 @@ async function refreshPublishingHistory() {
             const date = new Date(entry.timestamp);
             const formattedDate = date.toLocaleString();
             
-            // Check if entry is pending
+            // Check if entry is pending (only if status is explicitly 'pending' or 'info')
+            // Don't auto-refresh old scheduled entries that are stuck
             const isPending = entry.status === 'pending' || 
-                (entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully'));
+                (entry.status === 'info' && entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully'));
             
             let statusColor = '#6c757d';
             let statusIcon = 'ℹ';
@@ -2337,11 +2349,15 @@ async function refreshPublishingHistory() {
         html += '</div>';
         contentDiv.innerHTML = html;
         
-        // Check for pending entries
-        const hasPendingEntries = allHistory.some(entry => 
-            entry.status === 'pending' || 
-            entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully')
-        );
+        // Check for pending entries (only recent ones - within last 5 minutes)
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const hasPendingEntries = allHistory.some(entry => {
+            const entryTime = new Date(entry.timestamp).getTime();
+            const isRecent = entryTime > fiveMinutesAgo;
+            const isPending = entry.status === 'pending' || 
+                (entry.status === 'info' && entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully'));
+            return isRecent && isPending;
+        });
         
         console.log(`[Auto-refresh] Has pending entries: ${hasPendingEntries}`);
         
