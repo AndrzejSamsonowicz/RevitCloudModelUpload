@@ -2070,10 +2070,11 @@ async function loadPublishingSchedules() {
 }
 
 // Publishing History Functions
-function saveToPublishingHistory(fileName, projectName, status, message, details = {}) {
+async function saveToPublishingHistory(fileName, projectName, status, message, details = {}) {
     try {
         console.log('Saving to publishing history:', { fileName, projectName, status, message, details });
         
+        // Save to localStorage for immediate display
         const history = JSON.parse(localStorage.getItem('publishingHistory') || '[]');
         const entry = {
             timestamp: new Date().toISOString(),
@@ -2093,7 +2094,35 @@ function saveToPublishingHistory(fileName, projectName, status, message, details
         }
         
         localStorage.setItem('publishingHistory', JSON.stringify(history));
-        console.log('Successfully saved to history. Total records:', history.length);
+        console.log('Successfully saved to localStorage. Total records:', history.length);
+        
+        // Also save to Firestore for persistence across logins
+        if (typeof firebase !== 'undefined' && userId && typeof firebase.firestore === 'function') {
+            try {
+                const db = firebase.firestore();
+                await db.collection('publishingLogs').add({
+                    userId: userId,
+                    fileName: fileName,
+                    projectName: projectName,
+                    fileType: details.fileType || 'Unknown',
+                    scheduledTime: null, // Manual publish, no schedule
+                    actualTime: entry.timestamp,
+                    status: status,
+                    message: message,
+                    workItemId: details.workItemId || null,
+                    commandId: details.commandId || null,
+                    itemId: details.itemId || null,
+                    projectId: details.projectId || null,
+                    isRCM: false,
+                    isC4R: false,
+                    source: 'manual' // Mark as manual publish
+                });
+                console.log('Successfully saved to Firestore');
+            } catch (firestoreError) {
+                console.error('Error saving to Firestore:', firestoreError);
+                // Don't fail if Firestore save fails - localStorage is enough for current session
+            }
+        }
     } catch (error) {
         console.error('Error saving to publishing history:', error);
     }
@@ -2206,7 +2235,7 @@ async function refreshPublishingHistory() {
                     return {
                         timestamp: data.actualTime,
                         fileName: data.fileName,
-                        projectName: 'Scheduled Publish',
+                        projectName: data.source === 'manual' ? (data.projectName || 'Manual Publish') : 'Scheduled Publish',
                         status: displayStatus,
                         message: displayMessage,
                         details: {
@@ -2216,7 +2245,10 @@ async function refreshPublishingHistory() {
                             fileType: data.fileType,
                             isRCM: data.isRCM,
                             isC4R: data.isC4R,
-                            source: 'scheduled',
+                            commandId: data.commandId,
+                            itemId: data.itemId,
+                            projectId: data.projectId,
+                            source: data.source || 'scheduled', // Use actual source from Firestore
                             age: entryAge > tenMinutes ? 'timeout' : 'active'
                         }
                     };
