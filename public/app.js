@@ -2028,7 +2028,11 @@ async function loadPublishingSchedules() {
                 const allRows = document.querySelectorAll('#rvtFilesList tbody tr');
                 for (const row of allRows) {
                     const nameCell = row.querySelector('td:nth-child(2)');
-                    if (nameCell && nameCell.textContent.startsWith(schedule.fileName + ' ')) {
+                    const rowModelGuid = row.dataset.modelGuid;
+                    
+                    // Match by name AND modelGuid to avoid matching files with same name in different locations
+                    if (nameCell && nameCell.textContent.startsWith(schedule.fileName + ' ') && 
+                        rowModelGuid === schedule.modelGuid) {
                         const matchedFileId = row.dataset.fileId;
                         matchingFileIds.push(matchedFileId);
                         console.log(`  Found matching file version with fileId: ${matchedFileId}`);
