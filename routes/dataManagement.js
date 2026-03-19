@@ -100,6 +100,8 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
             try {
                 let nextPageUrl = `https://developer.api.autodesk.com/data/v1/projects/${projectId}/folders/${encodeURIComponent(currentFolderId)}/contents`;
                 
+                const subfolders = [];
+                
                 // Handle pagination - some folders have many items
                 while (nextPageUrl) {
                     const contentsResponse = await axios.get(nextPageUrl, {
@@ -123,8 +125,8 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                             const fullPath = currentPath ? `${currentPath}/${folderName}` : `/${folderName}`;
                             folderNameCache[item.id] = fullPath;
                             
-                            // Recursively process subfolders
-                            await getAllRvtFilesRecursive(item.id, fullPath, depth + 1);
+                            // Collect subfolder for parallel processing
+                            subfolders.push({ id: item.id, path: fullPath });
                         } else if (item.type === 'items') {
                             const displayName = item.attributes?.displayName || item.attributes?.name || 'Unknown';
                             const fileType = item.attributes?.extension?.type;
@@ -141,6 +143,7 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                                 if (tipVersion) {
                                     tipVersion._itemId = item.id;
                                     tipVersion._folderPath = currentPath || '/';
+                                    tipVersion._folderId = folderId; // Add folder ID for permission checking
                                     allRevitFiles.push(tipVersion);
                                     console.log(`Found: ${displayName} v${tipVersion.attributes?.versionNumber || '?'} in ${currentPath || '/'}`);
                                 }
@@ -152,6 +155,17 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                     nextPageUrl = contentsResponse.data.links?.next?.href;
                     if (nextPageUrl && !nextPageUrl.startsWith('http')) {
                         nextPageUrl = `https://developer.api.autodesk.com${nextPageUrl}`;
+                    }
+                }
+                
+                // Process subfolders in parallel (limit concurrency to 5 to avoid rate limits)
+                if (subfolders.length > 0) {
+                    const batchSize = 5;
+                    for (let i = 0; i < subfolders.length; i += batchSize) {
+                        const batch = subfolders.slice(i, i + batchSize);
+                        await Promise.all(
+                            batch.map(sf => getAllRvtFilesRecursive(sf.id, sf.path, depth + 1))
+                        );
                     }
                 }
             } catch (error) {
@@ -183,6 +197,13 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
         const rvtFiles = allRevitFiles.map(version => {
             const folderPath = version._folderPath || '/';
             
+            // DEBUG: Log first file's extension data to see available fields
+            if (allRevitFiles.indexOf(version) === 0) {
+                console.log('=== SAMPLE FILE EXTENSION DATA ===');
+                console.log('File:', version.attributes.displayName || version.attributes.name);
+                console.log('Extension:', JSON.stringify(version.attributes.extension, null, 2));
+            }
+            
             return {
                 id: version.id,
                 type: version.type,
@@ -197,8 +218,17 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                 isCloudModel: version.attributes?.extension?.type?.includes('C4RModel'),
                 projectGuid: version.attributes?.extension?.data?.projectGuid,
                 modelGuid: version.attributes?.extension?.data?.modelGuid,
-                // Folder path we collected during browse
+                // Try to extract Revit version from various possible fields
+                revitVersion: version.attributes?.extension?.data?.revitVersion || 
+                             version.attributes?.extension?.data?.sourceFileVersion ||
+                             version.attributes?.extension?.data?.applicationVersion ||
+                             version.attributes?.extension?.data?.formatVersion ||
+                             version.attributes?.extension?.data?.fileVersion ||
+                             version.attributes?.extension?.data?.format ||
+                             null,
+                // Folder path and folder ID for permission checking
                 folderPath: folderPath,
+                folderId: version._folderId, // Add folder ID for permission checking
                 publishedDate: version.attributes?.extension?.data?.publishedDate || null
             };
         });
@@ -367,6 +397,34 @@ router.post('/publish-status/:itemId', getAccessToken, async (req, res) => {
         res.json(response.data);
     } catch (error) {
         console.error('Error getting publish status:', error.response?.data || error.message);
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data || error.message
+        });
+    }
+});
+
+// Check folder permissions for current user
+router.get('/projects/:projectId/folders/:folderId/permissions', getAccessToken, async (req, res) => {
+    try {
+        const { projectId, folderId } = req.params;
+        
+        // Remove 'b.' prefix from projectId for BIM 360 API
+        const bim360ProjectId = projectId.replace(/^b\./, '');
+        
+        console.log(`Checking permissions for folder ${folderId} in project ${bim360ProjectId}`);
+        
+        const response = await axios.get(
+            `https://developer.api.autodesk.com/bim360/docs/v1/projects/${bim360ProjectId}/folders/${folderId}/permissions`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${req.accessToken}`
+                }
+            }
+        );
+        
+        res.json(response.data);
+    } catch (error) {
+        console.error('Error checking folder permissions:', error.response?.data || error.message);
         res.status(error.response?.status || 500).json({
             error: error.response?.data || error.message
         });

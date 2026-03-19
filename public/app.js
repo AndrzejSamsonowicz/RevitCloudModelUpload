@@ -1,5 +1,6 @@
 let sessionId = null;
 let userId = null; // Consistent APS user ID for Firestore
+let userEmail = null; // User email for permission checking
 let historyRefreshInterval = null; // Auto-refresh interval for pending entries
 
 /**
@@ -328,6 +329,7 @@ async function logout() {
         }
         sessionId = null;
         userId = null;
+        userEmail = null;
         
         // Clear local storage
         localStorage.clear();
@@ -360,6 +362,7 @@ async function checkSession() {
             const data = await response.json();
             if (data.authenticated) {
                 userId = data.userId; // Store consistent user ID
+                userEmail = data.userEmail; // Store user email for permission checking
                 console.log('User authenticated:', data.userEmail || userId);
                 updateAuthUI(true);
                 // Auto-load hubs after authentication
@@ -368,12 +371,14 @@ async function checkSession() {
             } else {
                 sessionId = null;
                 userId = null;
+                userEmail = null;
                 updateAuthUI(false);
                 return false;
             }
         } else {
             sessionId = null;
             userId = null;
+            userEmail = null;
             updateAuthUI(false);
             return false;
         }
@@ -767,8 +772,8 @@ async function publishModel() {
                 failCount++;
                 
                 // Determine if this is an RCM service access issue
-                let errorType = 'error';
-                let errorMessage = `Publish failed: ${data.error}`;
+                let errorType = 'warning';
+                let errorMessage = 'Publish failed: disabled service i.e.: Cloud Models for Revit, or the file is corrupted';
                 let helpfulTip = '';
                 let isRCM = false;
                 let isC4R = false;
@@ -777,15 +782,7 @@ async function publishModel() {
                 if (data.details) {
                     // 403 with code 'C4R' typically means RCM service not enabled
                     if (data.details.statusCode === 403 && data.details.errorCode === 'C4R') {
-                        errorType = 'warning';
-                        helpfulTip = '💡 This user may not have "Cloud Models for Revit" service enabled. Contact your Autodesk Account Admin to grant access.';
-                        addLog(`  ⚠ ${helpfulTip}`, 'warning');
                         isRCM = true; // This error specifically indicates RCM file
-                    }
-                    // No unpublished changes
-                    else if (data.error.includes('No unpublished changes')) {
-                        errorType = 'warning';
-                        helpfulTip = 'File is already at the latest version with no pending changes.';
                     }
                 }
                 
@@ -1238,25 +1235,101 @@ async function selectProject(projectId, projectName) {
 
 let allRevitFiles = [];
 
-async function loadRevitFilesFromMultipleFolders(projectId, folders) {
+// File cache with TTL (5 minutes)
+const fileCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedFiles(projectId) {
+    const cached = fileCache.get(projectId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log('Using cached files for project:', projectId);
+        return cached.files;
+    }
+    return null;
+}
+
+function setCachedFiles(projectId, files) {
+    fileCache.set(projectId, {
+        files: files,
+        timestamp: Date.now()
+    });
+    console.log(`Cached ${files.length} files for project:`, projectId);
+}
+
+function clearFileCache(projectId) {
+    if (projectId) {
+        fileCache.delete(projectId);
+        console.log('Cleared cache for project:', projectId);
+    } else {
+        fileCache.clear();
+        console.log('Cleared all file cache');
+    }
+}
+
+// Utility function to refresh files bypassing cache
+async function refreshProjectFiles() {
+    if (!selectedProjectId || !selectedProjectName) {
+        console.warn('No project selected');
+        return;
+    }
+    
+    console.log('Refreshing project files (bypassing cache)...');
+    clearFileCache(selectedProjectId);
+    
+    showLoadingModal(`Refreshing Revit files from ${selectedProjectName}...`);
+    
     try {
-        // Search each top folder and combine results
-        const allFiles = [];
+        const topFoldersResponse = await fetch(
+            `/api/data-management/projects/${selectedProjectId}/topFolders?hubId=${selectedHubId}`,
+            { headers: { 'Authorization': `Bearer ${sessionId}` } }
+        );
         
-        for (const folder of folders) {
-            console.log(`Searching folder: ${folder.attributes.name || folder.attributes.displayName}`);
-            
-            const response = await fetch(
-                `/api/data-management/projects/${projectId}/folders/${encodeURIComponent(folder.id)}/rvtFiles`,
-                { headers: { 'Authorization': `Bearer ${sessionId}` } }
-            );
-            
-            const data = await response.json();
-            if (response.ok && data.files) {
-                console.log(`  Found ${data.files.length} files in ${folder.attributes.name}`);
-                allFiles.push(...data.files);
+        const topFoldersData = await topFoldersResponse.json();
+        if (topFoldersResponse.ok && topFoldersData.data.length > 0) {
+            await loadRevitFilesFromMultipleFolders(selectedProjectId, topFoldersData.data, true);
+        }
+    } catch (error) {
+        showLoadingModalError(`Failed to refresh: ${error.message}`);
+    }
+}
+
+async function loadRevitFilesFromMultipleFolders(projectId, folders, forceRefresh = false) {
+    try {
+        // Check cache first
+        if (!forceRefresh) {
+            const cachedFiles = getCachedFiles(projectId);
+            if (cachedFiles) {
+                displayRevitFiles(cachedFiles);
+                return;
             }
         }
+        
+        // Process all folders in parallel
+        console.log(`Loading files from ${folders.length} folders in parallel...`);
+        
+        const folderPromises = folders.map(folder => 
+            fetch(
+                `/api/data-management/projects/${projectId}/folders/${encodeURIComponent(folder.id)}/rvtFiles`,
+                { headers: { 'Authorization': `Bearer ${sessionId}` } }
+            )
+            .then(response => response.json())
+            .then(data => {
+                const folderName = folder.attributes.name || folder.attributes.displayName;
+                if (data.files) {
+                    console.log(`  Found ${data.files.length} files in ${folderName}`);
+                    return data.files;
+                }
+                return [];
+            })
+            .catch(error => {
+                console.error(`Error loading folder ${folder.attributes.name}:`, error);
+                return [];
+            })
+        );
+        
+        // Wait for all folders to complete
+        const folderResults = await Promise.all(folderPromises);
+        const allFiles = folderResults.flat();
         
         console.log(`Total files found across all folders: ${allFiles.length}`);
         
@@ -1271,6 +1344,9 @@ async function loadRevitFilesFromMultipleFolders(projectId, folders) {
             return;
         }
         
+        // Cache the results
+        setCachedFiles(projectId, allFiles);
+        
         // Store and display files
         displayRevitFiles(allFiles);
     } catch (error) {
@@ -1278,19 +1354,171 @@ async function loadRevitFilesFromMultipleFolders(projectId, folders) {
     }
 }
 
+// Check if user has sufficient permissions (needs EDIT or CONTROL)
+function hasSufficientPermissions(permissionsData, userIdentifier) {
+    if (!permissionsData || !Array.isArray(permissionsData)) {
+        console.warn('Invalid permissions data');
+        return true; // Default to allowing if we can't check (API error)
+    }
+    
+    // Find current user's permissions (try matching by email, autodeskId, or subjectId)
+    // Use case-insensitive email comparison
+    const userPermissions = permissionsData.find(p => 
+        p.subjectType === 'USER' && 
+        (p.email?.toLowerCase() === userIdentifier?.toLowerCase() || 
+         p.autodeskId === userIdentifier || 
+         p.subjectId === userIdentifier)
+    );
+    
+    if (!userPermissions) {
+        console.warn('User permissions not found for:', userIdentifier);
+        console.log('Available users in permissions:', permissionsData.filter(p => p.subjectType === 'USER').map(p => ({ 
+            email: p.email, 
+            autodeskId: p.autodeskId,
+            userType: p.userType 
+        })));
+        // User not in permissions list = no access to this folder
+        return false;
+    }
+    
+    // Project Admins automatically have full access to all folders
+    if (userPermissions.userType === 'PROJECT_ADMIN') {
+        console.log(`User ${userIdentifier} is PROJECT_ADMIN - granting full access`);
+        return true;
+    }
+    
+    // Combine actions and inheritActions
+    const allActions = [
+        ...(userPermissions.actions || []),
+        ...(userPermissions.inheritActions || [])
+    ];
+    
+    // Check if user has EDIT or CONTROL permissions
+    const hasEditOrControl = allActions.includes('EDIT') || allActions.includes('CONTROL');
+    
+    console.log(`User ${userIdentifier} permissions in folder:`, {
+        name: userPermissions.name,
+        email: userPermissions.email,
+        userType: userPermissions.userType,
+        actions: userPermissions.actions,
+        inheritActions: userPermissions.inheritActions,
+        hasEditOrControl
+    });
+    
+    return hasEditOrControl;
+}
+
+// Check permissions for all files and mark which ones can be published
+async function checkFilePermissions(files) {
+    if (!sessionId || !userEmail) {
+        console.warn('No session or user email available for permission check');
+        return files; // Return files unchanged if we can't check
+    }
+    
+    // Group files by folder ID
+    const folderGroups = {};
+    files.forEach(file => {
+        const folderId = file.folderId || file._folderId;
+        if (folderId) {
+            if (!folderGroups[folderId]) {
+                folderGroups[folderId] = [];
+            }
+            folderGroups[folderId].push(file);
+        } else {
+            console.warn('File missing folderId:', file.name);
+        }
+    });
+    
+    console.log(`Checking permissions for ${Object.keys(folderGroups).length} folders`);
+    console.log('Folder IDs to check:', Object.keys(folderGroups));
+    
+    // Check permissions for each folder
+    const permissionChecks = Object.keys(folderGroups).map(async (folderId) => {
+        try {
+            const response = await fetch(
+                `/api/data-management/projects/${selectedProjectId}/folders/${encodeURIComponent(folderId)}/permissions`,
+                { headers: { 'Authorization': `Bearer ${sessionId}` } }
+            );
+            
+            if (response.ok) {
+                const permissionsData = await response.json();
+                
+                // Log detailed permissions info for debugging
+                console.log(`Permissions for folder ${folderId}:`, {
+                    totalUsers: permissionsData.filter(p => p.subjectType === 'USER').length,
+                    users: permissionsData.filter(p => p.subjectType === 'USER').map(p => ({
+                        name: p.name,
+                        email: p.email,
+                        autodeskId: p.autodeskId,
+                        userType: p.userType,
+                        actions: p.actions,
+                        inheritActions: p.inheritActions
+                    })),
+                    lookingFor: userEmail
+                });
+                
+                const canPublish = hasSufficientPermissions(permissionsData, userEmail);
+                
+                // Mark all files in this folder with permission status
+                folderGroups[folderId].forEach(file => {
+                    file.canPublish = canPublish;
+                    file.permissionsChecked = true;
+                });
+                
+                console.log(`Folder ${folderId}: canPublish = ${canPublish}`);
+            } else {
+                console.warn(`Failed to check permissions for folder ${folderId}:`, response.status);
+                // Default to allowing if permission check fails
+                folderGroups[folderId].forEach(file => {
+                    file.canPublish = true;
+                    file.permissionsChecked = false;
+                });
+            }
+        } catch (error) {
+            console.error(`Error checking permissions for folder ${folderId}:`, error);
+            // Default to allowing if permission check fails
+            folderGroups[folderId].forEach(file => {
+                file.canPublish = true;
+                file.permissionsChecked = false;
+            });
+        }
+    });
+    
+    await Promise.all(permissionChecks);
+    
+    return files;
+}
+
 function displayRevitFiles(files) {
-    allRevitFiles = files.map((file, index) => ({
-        ...file,
-        index,
-    }));
-    
-    renderFilesList();
-    updateFileSelection();
-    
-    // Show publishing action buttons after files are loaded
-    document.getElementById('publishingActions').style.display = 'block';
-    
-    hideLoadingModal();
+    // First check permissions for all files
+    checkFilePermissions(files).then(filesWithPermissions => {
+        allRevitFiles = filesWithPermissions.map((file, index) => ({
+            ...file,
+            index,
+        }));
+        
+        renderFilesList();
+        updateFileSelection();
+        
+        // Show publishing action buttons after files are loaded
+        document.getElementById('publishingActions').style.display = 'block';
+        
+        hideLoadingModal();
+    }).catch(error => {
+        console.error('Error checking permissions:', error);
+        // Continue anyway with all files allowed
+        allRevitFiles = files.map((file, index) => ({
+            ...file,
+            index,
+            canPublish: true,
+            permissionsChecked: false
+        }));
+        
+        renderFilesList();
+        updateFileSelection();
+        document.getElementById('publishingActions').style.display = 'block';
+        hideLoadingModal();
+    });
 }
 
 async function loadRevitFiles(projectId, folderId) {
@@ -1356,6 +1584,10 @@ function sortFiles(column) {
             case 'name':
                 valueA = a.name.toLowerCase();
                 valueB = b.name.toLowerCase();
+                break;
+            case 'version':
+                valueA = parseInt(a.versionNumber) || 0;
+                valueB = parseInt(b.versionNumber) || 0;
                 break;
             case 'path':
                 valueA = (a.folderPath || '').toLowerCase();
@@ -1449,6 +1681,18 @@ function renderFilesList() {
     thName.innerHTML = `Name${getSortIndicator('name')}`;
     thName.onclick = () => sortFiles('name');
     
+    // Version column
+    const thVersion = document.createElement('th');
+    thVersion.style.padding = '8px';
+    thVersion.style.textAlign = 'center';
+    thVersion.style.borderBottom = '2px solid #ddd';
+    thVersion.style.borderRight = '1px solid #ddd';
+    thVersion.style.cursor = 'pointer';
+    thVersion.style.userSelect = 'none';
+    thVersion.style.whiteSpace = 'nowrap';
+    thVersion.innerHTML = `Version${getSortIndicator('version')}`;
+    thVersion.onclick = () => sortFiles('version');
+    
     // File Type column
     const thFileType = document.createElement('th');
     thFileType.style.padding = '8px';
@@ -1507,6 +1751,7 @@ function renderFilesList() {
     
     headerRow.appendChild(thCheckbox);
     headerRow.appendChild(thName);
+    headerRow.appendChild(thVersion);
     headerRow.appendChild(thFileType);
     headerRow.appendChild(thPath);
     headerRow.appendChild(thDate);
@@ -1541,6 +1786,18 @@ function renderFilesList() {
         tr.style.borderBottom = '1px solid #eee';
         tr.style.cursor = 'pointer';
         
+        // Check if user has permission to publish this file
+        const canPublish = file.canPublish !== false; // Default to true if not checked
+        const permissionsChecked = file.permissionsChecked === true;
+        
+        // Grey out files without permissions
+        if (!canPublish) {
+            tr.style.backgroundColor = '#f5f5f5';
+            tr.style.opacity = '0.6';
+            tr.style.cursor = 'not-allowed';
+            tr.title = 'You have insufficient permissions to publish this file';
+        }
+        
         const checkboxId = `file-checkbox-${file.index}`;
         
         // Format publish date
@@ -1558,7 +1815,9 @@ function renderFilesList() {
         const tdCheckbox = document.createElement('td');
         tdCheckbox.style.padding = '8px';
         tdCheckbox.style.borderRight = '1px solid #ddd';
-        tdCheckbox.innerHTML = `<input type="checkbox" id="${checkboxId}" onchange="updateFileSelection()" onclick="event.stopPropagation()">`;
+        const disabledAttr = canPublish ? '' : ' disabled';
+        const disabledTitle = canPublish ? '' : ' title="Insufficient permissions"';
+        tdCheckbox.innerHTML = `<input type="checkbox" id="${checkboxId}" onchange="updateFileSelection()" onclick="event.stopPropagation()"${disabledAttr}${disabledTitle}>`;
         
         const tdName = document.createElement('td');
         tdName.style.padding = '8px';
@@ -1566,7 +1825,28 @@ function renderFilesList() {
         tdName.style.maxWidth = '33vw';
         tdName.style.whiteSpace = 'normal';
         tdName.style.wordBreak = 'break-word';
-        tdName.textContent = `${file.name} (v${file.versionNumber})`;
+        tdName.textContent = file.name;
+        
+        // Add permission indicator to file name if permissions were checked
+        if (permissionsChecked && !canPublish) {
+            const lockIcon = document.createElement('span');
+            lockIcon.innerHTML = ' 🔒';
+            lockIcon.title = 'Insufficient permissions (requires Edit or Manage)';
+            lockIcon.style.fontSize = '12px';
+            lockIcon.style.opacity = '0.6';
+            tdName.appendChild(lockIcon);
+        }
+        
+        // Version cell
+        const tdVersion = document.createElement('td');
+        tdVersion.style.padding = '8px';
+        tdVersion.style.borderRight = '1px solid #ddd';
+        tdVersion.style.fontSize = '12px';
+        tdVersion.style.textAlign = 'center';
+        tdVersion.style.fontWeight = '500';
+        tdVersion.style.color = '#495057';
+        tdVersion.style.whiteSpace = 'nowrap';
+        tdVersion.textContent = `v${file.versionNumber}`;
         
         // File Type cell
         const tdFileType = document.createElement('td');
@@ -1677,18 +1957,21 @@ function renderFilesList() {
         
         tr.appendChild(tdCheckbox);
         tr.appendChild(tdName);
+        tr.appendChild(tdVersion);
         tr.appendChild(tdFileType);
         tr.appendChild(tdPath);
         tr.appendChild(tdDate);
         tr.appendChild(tdTimeSince);
         tr.appendChild(tdPublishTime);
         
-        // Click on row toggles checkbox
+        // Click on row toggles checkbox (only if not disabled)
         tr.addEventListener('click', (e) => {
             if (e.target.tagName !== 'INPUT') {
                 const checkbox = tr.querySelector('input[type="checkbox"]');
-                checkbox.checked = !checkbox.checked;
-                updateFileSelection();
+                if (!checkbox.disabled) {
+                    checkbox.checked = !checkbox.checked;
+                    updateFileSelection();
+                }
             }
         });
         
@@ -2280,15 +2563,34 @@ async function refreshPublishingHistory() {
             }
         }
         
-        // Combine and sort by timestamp (most recent first)
-        const allHistory = [...localHistory, ...firestoreHistory].sort((a, b) => {
+        // Deduplicate entries (same timestamp + fileName means it's the same event)
+        const deduplicatedHistory = [];
+        const seenEntries = new Set();
+        
+        const allHistoryCombined = [...localHistory, ...firestoreHistory];
+        
+        for (const entry of allHistoryCombined) {
+            // Create a unique key based on timestamp and fileName
+            const key = `${entry.timestamp}_${entry.fileName}`;
+            
+            if (!seenEntries.has(key)) {
+                seenEntries.add(key);
+                deduplicatedHistory.push(entry);
+            } else {
+                console.log('Skipping duplicate entry:', entry.fileName, entry.timestamp);
+            }
+        }
+        
+        // Sort by timestamp (most recent first)
+        const allHistory = deduplicatedHistory.sort((a, b) => {
             return new Date(b.timestamp) - new Date(a.timestamp);
         });
         
         console.log('Local history count:', localHistory.length);
         console.log('Firestore history count:', firestoreHistory.length);
-        console.log('Combined history length:', allHistory.length);
-        console.log('Combined history:', allHistory);
+        console.log('Combined before deduplication:', allHistoryCombined.length);
+        console.log('Combined after deduplication:', allHistory.length);
+        console.log('Deduplicated history:', allHistory);
         
         // Don't update count here, we'll do it at the end after checking for pending entries
         
@@ -2381,20 +2683,6 @@ async function refreshPublishingHistory() {
                             <div style="font-size: 12px; color: #0077B6;">
                                 ⏳ Processing... This entry will update automatically when complete.
                             </div>
-                        </div>
-                    ` : ''}
-                    ${entry.details?.helpfulTip ? `
-                        <div style="margin-top: 10px; padding: 10px; background: ${entry.status === 'warning' ? '#fff3cd' : '#f8d7da'}; border-left: 3px solid ${entry.status === 'warning' ? '#ffc107' : '#dc3545'}; border-radius: 4px;">
-                            <div style="font-size: 13px; color: #856404; font-weight: 500;">
-                                ${entry.details.helpfulTip}
-                            </div>
-                            ${entry.details.errorCode === 'C4R' && entry.details.statusCode === 403 ? `
-                                <div style="margin-top: 8px; font-size: 12px; color: #856404;">
-                                    <strong>Required:</strong> "Cloud Models for Revit" service<br>
-                                    <strong>Affects:</strong> Single-user RCM files only (C4R/workshared files work normally)<br>
-                                    <strong>Solution:</strong> Autodesk Account Admin must enable this service for the user
-                                </div>
-                            ` : ''}
                         </div>
                     ` : ''}
                     ${entry.details && Object.keys(entry.details).length > 0 ? `

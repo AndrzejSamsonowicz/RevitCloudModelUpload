@@ -546,8 +546,31 @@
             
             <!-- Right column - Revit Cloud Models (2/3 width) -->
             <div style="width: 66.67%; border-left: 2px solid #ddd; padding: 20px; display: flex; flex-direction: column; overflow: hidden;">
-                <div id="filesSection" style="font-family: 'Artifact Elements', Arial, sans-serif; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <div id="filesSection" style="font-family: 'Artifact Elements', Arial, sans-serif; flex: 1; display: none; flex-direction: column; overflow: hidden;">
                     <h3 style="font-family: 'Artifact Elements', Arial, sans-serif; margin: 0 0 15px 0; flex-shrink: 0;">Revit Cloud Models</h3>
+                    
+                    <!-- Legend for C4R and RCM -->
+                    <div style="margin-bottom: 15px; padding: 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; flex-shrink: 0;">
+                        <div style="display: flex; gap: 20px; align-items: center; font-size: 13px;">
+                            <div style="font-weight: 600; color: #495057;">File Types:</div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="background: #17a2b8; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 500; font-size: 11px;">C4R</span>
+                                <span style="color: #666;">Collaboration for Revit (Cloud Worksharing)</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="background: #6f42c1; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 500; font-size: 11px;">RCM</span>
+                                <span style="color: #666;">Revit Cloud Model (Single-User)</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Permissions Information -->
+                    <div style="margin-bottom: 15px; padding: 10px 12px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-left: 3px solid #0696D7; border-radius: 4px; flex-shrink: 0;">
+                        <div style="font-size: 13px; color: #0077B6;">
+                            <strong>ℹ️ Note:</strong> You need at least Edit permissions to publish Revit files.
+                        </div>
+                    </div>
+                    
                     <div id="publishMessage" style="display: none;"></div>
                     
                     <div class="file-selection-controls" style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex-shrink: 0;">
