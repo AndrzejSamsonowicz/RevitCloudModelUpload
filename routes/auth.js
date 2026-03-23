@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const apsClient = require('../services/apsClient');
 const admin = require('firebase-admin');
-const { decryptUserCredentials } = require('./firebaseAuth');
+const { decryptUserCredentials, encryptUserCredentials, verifyFirebaseToken } = require('./firebaseAuth');
 
 // Store user sessions (in production, use Redis or database)
 const sessions = new Map();
@@ -169,6 +169,59 @@ router.post('/logout/:sessionId', (req, res) => {
 });
 
 /**
+ * GET /user/credentials
+ * Retrieve user's encrypted APS credentials from Firestore
+ */
+router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
+    try {
+        const userId = req.userId; // Set by verifyFirebaseToken middleware
+        
+        const credentials = await decryptUserCredentials(userId);
+        
+        if (!credentials) {
+            // Return empty credentials if none are set
+            return res.json({ 
+                credentials: { 
+                    clientId: '', 
+                    clientSecret: '' 
+                } 
+            });
+        }
+        
+        res.json({ credentials });
+    } catch (error) {
+        console.error('Error retrieving credentials:', error);
+        res.status(500).json({ error: 'Failed to retrieve credentials' });
+    }
+});
+
+/**
+ * PUT /user/credentials
+ * Save user's APS credentials to Firestore (encrypted)
+ */
+router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
+    try {
+        const userId = req.userId; // Set by verifyFirebaseToken middleware
+        const { clientId, clientSecret } = req.body;
+        
+        if (!clientId || !clientSecret) {
+            return res.status(400).json({ error: 'Client ID and Client Secret are required' });
+        }
+        
+        const success = await encryptUserCredentials(userId, clientId, clientSecret);
+        
+        if (!success) {
+            return res.status(500).json({ error: 'Failed to save credentials' });
+        }
+        
+        res.json({ success: true, message: 'Credentials saved successfully' });
+    } catch (error) {
+        console.error('Error saving credentials:', error);
+        res.status(500).json({ error: 'Failed to save credentials' });
+    }
+});
+
+/**
  * Middleware to get user token from session
  */
 router.getUserToken = (sessionId) => {
@@ -182,6 +235,14 @@ router.getUserToken = (sessionId) => {
 router.getUserIdFromSession = (sessionId) => {
     const session = sessions.get(sessionId);
     return session ? session.firebaseUserId : null;
+};
+
+/**
+ * Get user's APS credentials from session
+ */
+router.getUserCredentials = (sessionId) => {
+    const session = sessions.get(sessionId);
+    return session ? session.credentials : null;
 };
 
 module.exports = router;

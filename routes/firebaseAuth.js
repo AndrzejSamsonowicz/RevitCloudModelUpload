@@ -52,6 +52,39 @@ async function decryptUserCredentials(userId) {
 }
 
 /**
+ * Helper function to encrypt user credentials
+ */
+async function encryptUserCredentials(userId, clientId, clientSecret) {
+    try {
+        const algorithm = 'aes-256-cbc';
+        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+        const iv = crypto.randomBytes(16);
+        
+        const cipherClientId = crypto.createCipheriv(algorithm, key, iv);
+        const cipherClientSecret = crypto.createCipheriv(algorithm, key, iv);
+        
+        let encryptedClientId = cipherClientId.update(clientId, 'utf8', 'hex');
+        encryptedClientId += cipherClientId.final('hex');
+        
+        let encryptedClientSecret = cipherClientSecret.update(clientSecret, 'utf8', 'hex');
+        encryptedClientSecret += cipherClientSecret.final('hex');
+        
+        // Save to Firestore
+        await getDb().collection('users').doc(userId).update({
+            encryptedClientId: encryptedClientId,
+            encryptedClientSecret: encryptedClientSecret,
+            encryptionIV: iv.toString('hex'),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        
+        return true;
+    } catch (error) {
+        console.error(`Failed to encrypt credentials for user ${userId}:`, error.message);
+        return false;
+    }
+}
+
+/**
  * Verify Firebase ID Token Middleware
  * Protects routes that require authentication
  */
@@ -662,4 +695,4 @@ router.post('/update-last-login', verifyFirebaseToken, async (req, res) => {
     }
 });
 
-module.exports = { router, verifyFirebaseToken, verifyAdminAccess, decryptUserCredentials };
+module.exports = { router, verifyFirebaseToken, verifyAdminAccess, decryptUserCredentials, encryptUserCredentials };
