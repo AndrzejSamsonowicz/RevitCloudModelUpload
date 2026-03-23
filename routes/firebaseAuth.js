@@ -25,30 +25,34 @@ async function decryptUserCredentials(userId) {
     
     const userData = userDoc.data();
     
-    if (!userData.encryptedClientId || !userData.encryptedClientSecret) {
+    // Check for new format (single encrypted credentials field)
+    if (userData.encryptedCredentials && userData.credentialsIV) {
+        try {
+            const algorithm = 'aes-256-cbc';
+            const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+            const iv = Buffer.from(userData.credentialsIV, 'hex');
+            
+            const decipher = crypto.createDecipheriv(algorithm, key, iv);
+            
+            let decrypted = decipher.update(userData.encryptedCredentials, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
+            
+            const credentials = JSON.parse(decrypted);
+            return { clientId: credentials.clientId, clientSecret: credentials.clientSecret };
+        } catch (error) {
+            console.error(`Failed to decrypt credentials for user ${userId}:`, error.message);
+            console.log('Returning null - user will need to re-enter credentials');
+            return null;
+        }
+    }
+    
+    // Legacy format (separate encrypted fields) - try to decrypt for backward compatibility
+    if (userData.encryptedClientId || userData.encryptedClientSecret) {
+        console.log('Found legacy encrypted credentials format - user should re-save credentials');
         return null;
     }
     
-    try {
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
-        const iv = Buffer.from(userData.encryptionIV, 'hex');
-        
-        const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
-        const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
-        
-        let clientId = decipherClientId.update(userData.encryptedClientId, 'hex', 'utf8');
-        clientId += decipherClientId.final('utf8');
-        
-        let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
-        clientSecret += decipherClientSecret.final('utf8');
-        
-        return { clientId, clientSecret };
-    } catch (error) {
-        console.error(`Failed to decrypt credentials for user ${userId}:`, error.message);
-        console.log('Returning null - user will need to re-authenticate');
-        return null;
-    }
+    return null;
 }
 
 /**
@@ -60,23 +64,21 @@ async function encryptUserCredentials(userId, clientId, clientSecret) {
         const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
         const iv = crypto.randomBytes(16);
         
-        const cipherClientId = crypto.createCipheriv(algorithm, key, iv);
-        const cipherClientSecret = crypto.createCipheriv(algorithm, key, iv);
+        // Encrypt both credentials as a single JSON object
+        const credentialsJson = JSON.stringify({ clientId, clientSecret });
+        const cipher = crypto.createCipheriv(algorithm, key, iv);
         
-        let encryptedClientId = cipherClientId.update(clientId, 'utf8', 'hex');
-        encryptedClientId += cipherClientId.final('hex');
+        let encrypted = cipher.update(credentialsJson, 'utf8', 'hex');
+        encrypted += cipher.final('hex');
         
-        let encryptedClientSecret = cipherClientSecret.update(clientSecret, 'utf8', 'hex');
-        encryptedClientSecret += cipherClientSecret.final('hex');
-        
-        // Save to Firestore
+        // Save to Firestore using new field names
         await getDb().collection('users').doc(userId).update({
-            encryptedClientId: encryptedClientId,
-            encryptedClientSecret: encryptedClientSecret,
-            encryptionIV: iv.toString('hex'),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            encryptedCredentials: encrypted,
+            credentialsIV: iv.toString('hex'),
+            credentialsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         
+        console.log(`Successfully encrypted and saved credentials for user ${userId}`);
         return true;
     } catch (error) {
         console.error(`Failed to encrypt credentials for user ${userId}:`, error.message);
