@@ -378,6 +378,71 @@
             border-color: #adb5bd !important;
         }
 
+        /* Video Modal Styles */
+        .video-modal {
+            position: fixed;
+            z-index: 3000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            display: none;
+        }
+
+        .video-modal-content {
+            background-color: #fefefe;
+            margin: 3% auto;
+            padding: 0;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 1200px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .video-modal-header {
+            padding: 15px 20px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .video-modal-header h3 {
+            margin: 0;
+            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .video-modal-close {
+            color: #aaa;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .video-modal-close:hover,
+        .video-modal-close:focus {
+            color: #000;
+        }
+
+        .video-modal-body {
+            padding: 20px;
+            background-color: #000;
+        }
+
+        .video-modal-body video {
+            width: 100%;
+            height: auto;
+            max-height: 70vh;
+            display: block;
+        }
+
         .credentials-right-column {
             flex: 1;
             min-width: 280px;
@@ -674,6 +739,22 @@
                         <div id="credentialsMessage" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Tutorial Modal -->
+    <div id="videoModal" class="video-modal">
+        <div class="video-modal-content">
+            <div class="video-modal-header">
+                <h3 id="videoModalTitle">Tutorial Video</h3>
+                <span class="video-modal-close" onclick="closeVideoModal()">&times;</span>
+            </div>
+            <div class="video-modal-body">
+                <video id="videoPlayer" controls controlsList="nodownload">
+                    <source id="videoSource" src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
             </div>
         </div>
     </div>

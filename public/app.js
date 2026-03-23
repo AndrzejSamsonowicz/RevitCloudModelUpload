@@ -199,22 +199,49 @@ async function saveCredentials() {
 }
 
 function openApsGuide() {
-    window.open('https://aps.autodesk.com/en/docs/oauth/v2/tutorials/create-app/', '_blank');
+    showVideoModal('create-aps-app.mp4', 'Step 1: Create an APS Application');
 }
 
 function openAddUrlVideo() {
-    // TODO: Add video URL for adding callback URL step
-    alert('Video tutorial coming soon!');
+    showVideoModal('add-url.mp4', 'Step 2: Add the Callback URL');
 }
 
 function openCustomIntegrationVideo() {
-    // TODO: Add video URL for custom integration step
-    alert('Video tutorial coming soon!');
+    showVideoModal('custom-integration.mp4', 'Step 3: Add Custom Integration');
 }
 
 function openCopyClientIdVideo() {
-    // TODO: Add video URL for copying credentials step
-    alert('Video tutorial coming soon!');
+    showVideoModal('copy-client-id-secret.mp4', 'Step 4: Copy Client ID and Secret');
+}
+
+function showVideoModal(videoFile, title) {
+    const modal = document.getElementById('videoModal');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const videoSource = document.getElementById('videoSource');
+    const videoTitle = document.getElementById('videoModalTitle');
+    
+    // Set video source and title
+    videoSource.src = videoFile;
+    videoTitle.textContent = title;
+    
+    // Load and display
+    videoPlayer.load();
+    modal.style.display = 'block';
+    
+    // Pause video when modal is closed
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeVideoModal();
+        }
+    };
+}
+
+function closeVideoModal() {
+    const modal = document.getElementById('videoModal');
+    const videoPlayer = document.getElementById('videoPlayer');
+    
+    videoPlayer.pause();
+    modal.style.display = 'none';
 }
 
 // Loading Modal Functions
