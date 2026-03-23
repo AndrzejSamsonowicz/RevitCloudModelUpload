@@ -202,6 +202,21 @@ function openApsGuide() {
     window.open('https://aps.autodesk.com/en/docs/oauth/v2/tutorials/create-app/', '_blank');
 }
 
+function openAddUrlVideo() {
+    // TODO: Add video URL for adding callback URL step
+    alert('Video tutorial coming soon!');
+}
+
+function openCustomIntegrationVideo() {
+    // TODO: Add video URL for custom integration step
+    alert('Video tutorial coming soon!');
+}
+
+function openCopyClientIdVideo() {
+    // TODO: Add video URL for copying credentials step
+    alert('Video tutorial coming soon!');
+}
+
 // Loading Modal Functions
 function showLoadingModal(text) {
     const modal = document.getElementById('loadingModal');

@@ -373,6 +373,11 @@
             justify-content: center;
         }
 
+        .step-button-clickable:hover {
+            background-color: #e9ecef !important;
+            border-color: #adb5bd !important;
+        }
+
         .credentials-right-column {
             flex: 1;
             min-width: 280px;
@@ -604,18 +609,49 @@
             <div class="credentials-modal-body">
                 <div class="credentials-two-column">
                     <div class="credentials-left-column">
-                        <div style="margin-bottom: 20px; max-width: 450px;">
-                            <button onclick="openApsGuide()" style="width: 100%; box-sizing: border-box;">
-                                How to create an APS app
-                            </button>
-                        </div>
-                        <div style="margin-bottom: 20px; max-width: 450px;">
-                            <div style="padding: 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px;">
-                                In your app General Settings add the Callback URL: <strong>http://localhost:3000/oauth/callback</strong>
+                        <div style="margin-bottom: 10px; max-width: 450px;">
+                            <div style="font-size: 16px; font-weight: bold; color: #333; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 15px;">
+                                Follow these steps to enable the application:
+                            </div>
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                                Step 1
                             </div>
                         </div>
-                        <div style="text-align: center; max-width: 450px; width: 450px;">
-                            <img src="APS General Settings.png" alt="APS General Settings" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="margin-bottom: 20px; max-width: 450px;">
+                            <div onclick="openApsGuide()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                Create an APS application
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 10px; max-width: 450px;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                                Step 2
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px; max-width: 450px;">
+                            <div onclick="openAddUrlVideo()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                <span style="font-weight: bold;">Add the Callback URL</span><br>
+                                <span style="font-weight: normal;">https://usermgt.digibuild.ch/index.html</span>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 10px; max-width: 450px;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                                Step 3
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px; max-width: 450px;">
+                            <div onclick="openCustomIntegrationVideo()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                Add custom integration
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 10px; max-width: 450px;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                                Step 4
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px; max-width: 450px;">
+                            <div onclick="openCopyClientIdVideo()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                Copy and paste Client ID and Client Secret
+                            </div>
                         </div>
                     </div>
                     <div class="credentials-right-column">
