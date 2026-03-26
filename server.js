@@ -110,15 +110,11 @@ app.use(helmet({
             ],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
             objectSrc: ["'none'"],
-            frameSrc: ["https://www.youtube.com"], // For video modals
-            upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+            frameSrc: ["https://www.youtube.com"] // For video modals
+            // upgradeInsecureRequests disabled - VM runs on HTTP without SSL
         }
     },
-    hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true
-    }
+    hsts: false // Disabled - VM runs on HTTP without SSL certificates
 }));
 
 // 2. CORS Protection
@@ -147,15 +143,16 @@ app.use(cors({
 }));
 
 // 3. HTTPS Enforcement in Production
-if (process.env.NODE_ENV === 'production') {
-    app.use((req, res, next) => {
-        if (req.header('x-forwarded-proto') !== 'https') {
-            res.redirect(`https://${req.header('host')}${req.url}`);
-        } else {
-            next();
-        }
-    });
-}
+// DISABLED - VM runs on HTTP without SSL certificates
+// if (process.env.NODE_ENV === 'production') {
+//     app.use((req, res, next) => {
+//         if (req.header('x-forwarded-proto') !== 'https') {
+//             res.redirect(`https://${req.header('host')}${req.url}`);
+//         } else {
+//             next();
+//         }
+//     });
+// }
 
 // 4. Request Size Limits
 app.use(express.json({ limit: '10mb' }));
