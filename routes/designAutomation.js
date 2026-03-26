@@ -3,12 +3,101 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const fsPromises = require('fs/promises');
+const crypto = require('crypto');
 const designAutomation = require('../services/designAutomation');
 const authRoutes = require('./auth');
 const axios = require('axios');
 const apsClient = require('../services/apsClient');
 
-const upload = multer({ dest: 'tmp/' });
+// Secure file upload configuration
+const upload = multer({
+    dest: 'tmp/',
+    limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB max
+        files: 1
+    },
+    fileFilter: (req, file, cb) => {
+        // Only allow .zip files
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (ext !== '.zip') {
+            return cb(new Error('Only .zip files are allowed'));
+        }
+        
+        // Validate MIME type
+        const allowedMimeTypes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'];
+        if (!allowedMimeTypes.includes(file.mimetype)) {
+            return cb(new Error('Invalid file type'));
+        }
+        
+        cb(null, true);
+    },
+    storage: multer.diskStorage({
+        destination: 'tmp/',
+        filename: (req, file, cb) => {
+            // Generate secure random filename
+            const uniqueName = crypto.randomBytes(16).toString('hex') + '.zip';
+            cb(null, uniqueName);
+        }
+    })
+});
+
+/**
+ * Cleanup old uploaded files
+ */
+async function cleanupOldUploads() {
+    try {
+        const files = await fsPromises.readdir('tmp/');
+        const now = Date.now();
+        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+        let cleanedCount = 0;
+        
+        for (const file of files) {
+            const filePath = path.join('tmp/', file);
+            try {
+                const stats = await fsPromises.stat(filePath);
+                
+                if (now - stats.mtimeMs > maxAge) {
+                    await fsPromises.unlink(filePath);
+                    cleanedCount++;
+                }
+            } catch (error) {
+                console.error(`Error processing file ${file}:`, error.message);
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            console.log(`[Upload Cleanup] Deleted ${cleanedCount} old upload(s)`);
+        }
+    } catch (error) {
+        console.error('[Upload Cleanup] Error:', error.message);
+    }
+}
+
+// Run cleanup every hour
+setInterval(cleanupOldUploads, 60 * 60 * 1000);
+console.log('✓ Upload cleanup scheduler initialized');
+
+/**
+ * Validate nickname input
+ */
+function validateNickname(nickname) {
+    if (!nickname || typeof nickname !== 'string') {
+        return { valid: false, error: 'Nickname is required' };
+    }
+    
+    const trimmed = nickname.trim();
+    if (trimmed.length < 3 || trimmed.length > 64) {
+        return { valid: false, error: 'Nickname must be 3-64 characters' };
+    }
+    
+    // Allow only alphanumeric, underscore, hyphen
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+        return { valid: false, error: 'Nickname can only contain letters, numbers, underscore, and hyphen' };
+    }
+    
+    return { valid: true, value: trimmed };
+}
 
 /**
  * Set Design Automation nickname
@@ -17,11 +106,12 @@ router.post('/setup/nickname', async (req, res, next) => {
     try {
         const { nickname } = req.body;
         
-        if (!nickname) {
-            return res.status(400).json({ error: 'Nickname is required' });
+        const validation = validateNickname(nickname);
+        if (!validation.valid) {
+            return res.status(400).json({ error: validation.error });
         }
 
-        const result = await designAutomation.setNickname(nickname);
+        const result = await designAutomation.setNickname(validation.value);
         res.json({ success: true, data: result });
     } catch (error) {
         next(error);

@@ -5,17 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Revit Cloud Model Publisher</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Artifact+Elements:wght@400;700&display=swap');
-        
         * {
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
         body {
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: white;
             min-height: 100vh;
         }
@@ -29,7 +27,7 @@
             border-radius: 5px !important;
             cursor: pointer !important;
             font-size: 14px !important;
-            font-family: 'Artifact Elements', Arial, sans-serif !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important;
             font-weight: 400 !important;
             min-width: 120px !important;
             height: 32px !important;
@@ -74,7 +72,7 @@
             cursor: pointer;
             transition: background-color 0.2s ease;
             font-size: 14px;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -128,7 +126,7 @@
             text-align: center;
             color: #6c757d;
             font-style: italic;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         }
 
         .filter-input {
@@ -138,7 +136,7 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         }
 
         .file-checkbox-item {
@@ -274,7 +272,7 @@
             min-width: 300px;
             max-width: 500px;
             animation: slideIn 0.3s ease-out;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         }
 
         .toast-notification.success {
@@ -352,7 +350,7 @@
             max-height: 95vh;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -413,7 +411,7 @@
 
         .video-modal-header h3 {
             margin: 0;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             font-size: 18px;
             color: #333;
         }
@@ -489,7 +487,7 @@
         .credentials-modal-header h3 {
             margin: 0;
             color: #333;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         }
 
         .credentials-modal-close {
@@ -498,7 +496,7 @@
             font-weight: bold;
             cursor: pointer;
             line-height: 1;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         }
 
         .credentials-modal-close:hover,
@@ -508,7 +506,7 @@
 
         .credentials-modal-body {
             padding: 20px;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         }
 
         /* Loading Modal Styles */
@@ -540,7 +538,7 @@
             font-size: 16px;
             color: #333;
             margin-bottom: 20px;
-            font-family: 'Artifact Elements', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             transition: color 0.3s ease;
         }
 
@@ -567,36 +565,36 @@
         }
     </style>
 </head>
-<body style="font-family: 'Artifact Elements', Arial, sans-serif; margin: 0; overflow: hidden; height: 100vh; visibility: hidden;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin: 0; overflow: hidden; height: 100vh; visibility: hidden;">
     <!-- Login Screen - visible before authentication -->
     <div id="loginScreen" style="padding: 20px;">
-        <h1 style="font-family: 'Artifact Elements', Arial, sans-serif; margin: 0 0 15px 0; font-size: 24px;">Revit Cloud Model Publisher</h1>
+        <h1 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin: 0 0 15px 0; font-size: 24px;">Revit Cloud Model Publisher</h1>
         <div style="display: flex; flex-direction: column; gap: 8px; width: 200px; margin-bottom: 10px;">
-            <button onclick="logout()" style="width: 200px;">Logout</button>
-            <button onclick="showCredentialsModal()" id="settingsBtn" style="width: 200px;">Settings</button>
-            <button onclick="login()" id="loginBtn" style="width: 200px;">Login with Autodesk</button>
+            <button id="loginScreenLogoutBtn" style="width: 200px;">Logout</button>
+            <button id="settingsBtn" style="width: 200px;">Settings</button>
+            <button id="loginBtn" style="width: 200px;">Login with Autodesk</button>
         </div>
-        <div id="error" style="display: none; color: red; font-family: 'Artifact Elements', Arial, sans-serif;"></div>
+        <div id="error" style="display: none; color: red; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;"></div>
         <div id="authMessage"></div>
     </div>
     
     <div id="content" style="display: none;">
         <div style="display: flex; height: 100vh;">
-            <!-- Left column - Title, Buttons, Hubs and Projects (1/3 width) -->
-            <div style="width: 33.33%; display: flex; flex-direction: column; padding: 20px; font-family: 'Artifact Elements', Arial, sans-serif;">
+            <!-- Left column - Title, Buttons, Hubs and Projects (1/5 width) -->
+            <div style="width: 20%; display: flex; flex-direction: column; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">
                 <!-- Header Section -->
                 <div style="flex-shrink: 0; margin-bottom: 20px;">
-                    <h1 style="font-family: 'Artifact Elements', Arial, sans-serif; margin: 0 0 10px 0; font-size: 24px;">Revit Cloud Model Publisher</h1>
+                    <h1 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin: 0 0 10px 0; font-size: 24px;">Revit Cloud Model Publisher</h1>
                     <div id="login" style="display: flex; flex-direction: column; gap: 8px; width: 200px;">
-                        <button onclick="logout()" id="logoutBtn" style="width: 200px;">Logout</button>
-                        <button onclick="showCredentialsModal()" id="settingsBtn2" style="width: 200px;">Settings</button>
-                        <button onclick="login()" id="autodeskLoginBtn" style="width: 200px;">Login with Autodesk</button>
+                        <button id="logoutBtn" style="width: 200px;">Logout</button>
+                        <button id="settingsBtn2" style="width: 200px;">Settings</button>
+                        <button id="autodeskLoginBtn" style="width: 200px;">Login with Autodesk</button>
                     </div>
                 </div>
                 <!-- Hubs section -->
                 <div id="hubsPanel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0;">
-                    <h3 style="font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 15px; flex-shrink: 0;">Hubs</h3>
-                    <input type="text" class="filter-input" id="hubFilter" placeholder="Filter hubs..." oninput="filterHubs()" style="flex-shrink: 0;">
+                    <h3 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 15px; flex-shrink: 0;">Hubs</h3>
+                    <input type="text" class="filter-input" id="hubFilter" placeholder="Filter hubs..." style="flex-shrink: 0;">
                     <div id="hubsList" style="flex: 1; overflow-y: auto; margin-top: 10px;">
                         <div class="no-items">Loading hubs...</div>
                     </div>
@@ -605,8 +603,8 @@
                 <!-- Projects section -->
                 <div id="projectsPanel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0;">
                     <div id="projectsHeader" style="display: none; flex-shrink: 0;">
-                        <h3 id="selectedHubTitle" style="font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 15px;"></h3>
-                        <input type="text" class="filter-input" id="projectFilter" placeholder="Filter projects..." oninput="filterProjects()">
+                        <h3 id="selectedHubTitle" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 15px;"></h3>
+                        <input type="text" class="filter-input" id="projectFilter" placeholder="Filter projects...">
                     </div>
                     <div id="projectsList" style="flex: 1; overflow-y: auto;">
                         <div class="no-items">Select a hub to view projects</div>
@@ -614,10 +612,10 @@
                 </div>
             </div>
             
-            <!-- Right column - Revit Cloud Models (2/3 width) -->
-            <div style="width: 66.67%; border-left: 2px solid #ddd; padding: 20px; display: flex; flex-direction: column; overflow: hidden;">
-                <div id="filesSection" style="font-family: 'Artifact Elements', Arial, sans-serif; flex: 1; display: none; flex-direction: column; overflow: hidden;">
-                    <h3 style="font-family: 'Artifact Elements', Arial, sans-serif; margin: 0 0 15px 0; flex-shrink: 0;">Revit Cloud Models</h3>
+            <!-- Right column - Revit Cloud Models (4/5 width) -->
+            <div style="width: 80%; border-left: 2px solid #ddd; padding: 20px; display: flex; flex-direction: column; overflow: hidden;">
+                <div id="filesSection" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; flex: 1; display: none; flex-direction: column; overflow: hidden;">
+                    <h3 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin: 0 0 15px 0; flex-shrink: 0;">Revit Cloud Models</h3>
                     
                     <!-- Legend for C4R and RCM -->
                     <div style="margin-bottom: 15px; padding: 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; flex-shrink: 0;">
@@ -644,8 +642,8 @@
                     <div id="publishMessage" style="display: none;"></div>
                     
                     <div class="file-selection-controls" style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex-shrink: 0;">
-                        <button onclick="selectAllFiles()" style="padding: 6px 12px; font-size: 12px; min-width: 80px !important; height: 32px !important;">Select All</button>
-                        <button onclick="deselectAllFiles()" style="padding: 6px 12px; font-size: 12px; min-width: 80px !important; height: 32px !important;">Deselect All</button>
+                        <button id="selectAllBtn" style="padding: 6px 12px; font-size: 12px; min-width: 80px !important; height: 32px !important;">Select All</button>
+                        <button id="deselectAllBtn" style="padding: 6px 12px; font-size: 12px; min-width: 80px !important; height: 32px !important;">Deselect All</button>
 
                         <span id="fileSelectionCount" style="color: #666; padding: 6px; font-size: 14px;">0 files selected</span>
                     </div>
@@ -655,9 +653,9 @@
                     </div>
 
                     <div id="publishingActions" style="flex-shrink: 0; display: none;">
-                        <button onclick="publishModel()">Publish Selected Files Now</button>
-                        <button onclick="savePublishingSchedules()" style="margin-left: 10px; background-color: #28a745;">Save Publishing Schedules</button>
-                        <button onclick="showPublishingHistory()" style="margin-left: 10px; background-color: #6c757d;">See Publishing History</button>
+                        <button id="publishNowBtn">Publish Selected Files Now</button>
+                        <button id="saveSchedulesBtn" style="margin-left: 10px; background-color: #28a745;">Save Publishing Schedules</button>
+                        <button id="showHistoryBtn" style="margin-left: 10px; background-color: #6c757d;">See Publishing History</button>
                     </div>
                 </div>
             </div>
@@ -669,70 +667,70 @@
         <div class="credentials-modal-content">
             <div class="credentials-modal-header">
                 <h3>Enter your APS application Client Credentials</h3>
-                <span class="credentials-modal-close" onclick="closeCredentialsModal()">&times;</span>
+                <span class="credentials-modal-close" id="closeCredentialsBtn">&times;</span>
             </div>
             <div class="credentials-modal-body">
                 <div class="credentials-two-column">
                     <div class="credentials-left-column">
                         <div style="margin-bottom: 10px; max-width: 450px;">
-                            <div style="font-size: 16px; font-weight: bold; color: #333; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 15px;">
+                            <div style="font-size: 16px; font-weight: bold; color: #333; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 15px;">
                                 Follow these steps to enable the application:
                             </div>
-                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 10px; text-align: center;">
                                 Step 1
                             </div>
                         </div>
                         <div style="margin-bottom: 20px; max-width: 450px;">
-                            <div onclick="openApsGuide()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div id="openApsGuideBtn" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
                                 Create an APS application
                             </div>
                         </div>
                         <div style="margin-bottom: 10px; max-width: 450px;">
-                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 10px; text-align: center;">
                                 Step 2
                             </div>
                         </div>
                         <div style="margin-bottom: 20px; max-width: 450px;">
-                            <div onclick="openAddUrlVideo()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div id="openAddUrlVideoBtn" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
                                 <span style="font-weight: bold;">Add the Callback URL</span><br>
                                 <span style="font-weight: normal;">http://34.65.169.15:3000/oauth/callback</span>
                             </div>
                         </div>
                         <div style="margin-bottom: 10px; max-width: 450px;">
-                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 10px; text-align: center;">
                                 Step 3
                             </div>
                         </div>
                         <div style="margin-bottom: 20px; max-width: 450px;">
-                            <div onclick="openCustomIntegrationVideo()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div id="openCustomIntegrationVideoBtn" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
                                 Add custom integration
                             </div>
                         </div>
                         <div style="margin-bottom: 10px; max-width: 450px;">
-                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: 'Artifact Elements', Arial, sans-serif; margin-bottom: 10px; text-align: center;">
+                            <div style="font-size: 14px; font-weight: bold; color: #495057; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 10px; text-align: center;">
                                 Step 4
                             </div>
                         </div>
                         <div style="margin-bottom: 20px; max-width: 450px;">
-                            <div onclick="openCopyClientIdVideo()" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div id="openCopyClientIdVideoBtn" class="step-button-clickable" style="display: block; padding: 12px; background-color: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 14px; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; box-sizing: border-box; width: 450px; text-align: center; cursor: pointer; transition: all 0.2s;">
                                 Copy and paste Client ID and Client Secret
                             </div>
                         </div>
                     </div>
                     <div class="credentials-right-column">
                         <div style="margin-bottom: 15px; max-width: 450px;">
-                            <label for="clientIdInput" style="display: block; margin: 0 0 5px 0; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif;">Client ID:</label>
+                            <label for="clientIdInput" style="display: block; margin: 0 0 5px 0; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">Client ID:</label>
                             <input type="text" id="clientIdInput" placeholder="Enter your APS Client ID" 
-                                   style="width: 450px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; margin: 0;" />
+                                   style="width: 450px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; box-sizing: border-box; margin: 0;" />
                         </div>
                         <div style="margin-bottom: 20px; max-width: 450px;">
-                            <label for="clientSecretInput" style="display: block; margin: 0 0 5px 0; font-weight: bold; font-family: 'Artifact Elements', Arial, sans-serif;">Client Secret:</label>
+                            <label for="clientSecretInput" style="display: block; margin: 0 0 5px 0; font-weight: bold; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">Client Secret:</label>
                             <input type="password" id="clientSecretInput" placeholder="Enter your APS Client Secret" 
-                                   style="width: 450px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; font-family: 'Artifact Elements', Arial, sans-serif; box-sizing: border-box; margin: 0;" />
-                            <small style="color: #666; font-style: italic; font-family: 'Artifact Elements', Arial, sans-serif;">Secret will be hidden for security</small>
+                                   style="width: 450px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; box-sizing: border-box; margin: 0;" />
+                            <small style="color: #666; font-style: italic; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">Secret will be hidden for security</small>
                         </div>
                         <div style="margin-bottom: 15px; max-width: 450px;">
-                            <button onclick="saveCredentials()" style="width: 100%; box-sizing: border-box; margin: 0;">
+                            <button id="saveCredentialsBtn" style="width: 100%; box-sizing: border-box; margin: 0;">
                                 Save Credentials
                             </button>
                         </div>
@@ -748,7 +746,7 @@
         <div class="video-modal-content">
             <div class="video-modal-header">
                 <h3 id="videoModalTitle">Tutorial Video</h3>
-                <span class="video-modal-close" onclick="closeVideoModal()">&times;</span>
+                <span class="video-modal-close" id="closeVideoBtn">&times;</span>
             </div>
             <div class="video-modal-body">
                 <video id="videoPlayer" controls controlsList="nodownload">
@@ -774,13 +772,13 @@
         <div class="credentials-modal-content" style="max-width: 1200px; display: flex; flex-direction: column; max-height: 90vh;">
             <div class="credentials-modal-header">
                 <h3>Publishing History</h3>
-                <span class="credentials-modal-close" onclick="closePublishingHistory()">&times;</span>
+                <span class="credentials-modal-close" id="closeHistoryBtn">&times;</span>
             </div>
             <div class="credentials-modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-shrink: 0;">
-                    <button onclick="refreshPublishingHistory()" style="min-width: 150px;">Refresh History</button>
-                    <button onclick="downloadHistoryReport()" style="min-width: 150px; background-color: #0696D7 !important;">Download Report</button>
-                    <button onclick="clearPublishingHistory()" style="min-width: 150px; background-color: #dc3545 !important;">Clear History</button>
+                    <button id="refreshHistoryBtn" style="min-width: 150px;">Refresh History</button>
+                    <button id="downloadReportBtn" style="min-width: 150px; background-color: #0696D7 !important;">Download Report</button>
+                    <button id="clearHistoryBtn" style="min-width: 150px; background-color: #dc3545 !important;">Clear History</button>
                     <span id="historyCount" style="color: #666; margin-left: auto;">0 records</span>
                 </div>
                 <div id="publishingHistoryContent" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 15px; background: #f8f9fa;">
@@ -798,15 +796,8 @@
     <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
     
-    <!-- Initialize Firebase -->
-    <script>
-        if (typeof firebaseConfig !== 'undefined') {
-            firebase.initializeApp(firebaseConfig);
-            console.log('Firebase initialized');
-        } else {
-            console.warn('Firebase config not found');
-        }
-    </script>
+    <!-- XSS Prevention Utilities -->
+    <script src="sanitize.js"></script>
 
     <script src="app.js"></script>
 </body>

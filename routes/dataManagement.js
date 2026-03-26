@@ -108,13 +108,35 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                         headers: { 'Authorization': `Bearer ${req.accessToken}` }
                     });
                     
-                    // Build a map of version IDs to version data from the included array
+                    // Build maps of IDs to data from the included array
                     const includedVersions = {};
+                    const includedUsers = {};
+                    
                     if (contentsResponse.data.included) {
+                        // DEBUG: Log what types are in the included array
+                        const includedTypes = new Set(contentsResponse.data.included.map(item => item.type));
+                        if (depth === 0 && allRevitFiles.length === 0) {
+                            console.log('=== INCLUDED ARRAY TYPES ===', Array.from(includedTypes));
+                        }
+                        
                         for (const includedItem of contentsResponse.data.included) {
                             if (includedItem.type === 'versions') {
                                 includedVersions[includedItem.id] = includedItem;
+                            } else if (includedItem.type === 'users') {
+                                // Store user info for later reference
+                                includedUsers[includedItem.id] = {
+                                    id: includedItem.id,
+                                    name: includedItem.attributes?.name || includedItem.attributes?.firstName + ' ' + includedItem.attributes?.lastName || null,
+                                    firstName: includedItem.attributes?.firstName,
+                                    lastName: includedItem.attributes?.lastName,
+                                    email: includedItem.attributes?.email
+                                };
                             }
+                        }
+                        
+                        // DEBUG: Log if we found any users
+                        if (depth === 0 && allRevitFiles.length === 0) {
+                            console.log('=== USERS FOUND IN INCLUDED ===', Object.keys(includedUsers).length);
                         }
                     }
                     
@@ -144,6 +166,18 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                                     tipVersion._itemId = item.id;
                                     tipVersion._folderPath = currentPath || '/';
                                     tipVersion._folderId = folderId; // Add folder ID for permission checking
+                                    
+                                    // Attach user information from included users
+                                    const lastModifiedUserId = tipVersion.relationships?.lastModifiedUser?.data?.id;
+                                    const createUserId = tipVersion.relationships?.user?.data?.id;
+                                    
+                                    if (lastModifiedUserId && includedUsers[lastModifiedUserId]) {
+                                        tipVersion._lastModifiedUser = includedUsers[lastModifiedUserId];
+                                    }
+                                    if (createUserId && includedUsers[createUserId]) {
+                                        tipVersion._createUser = includedUsers[createUserId];
+                                    }
+                                    
                                     allRevitFiles.push(tipVersion);
                                     console.log(`Found: ${displayName} v${tipVersion.attributes?.versionNumber || '?'} in ${currentPath || '/'}`);
                                 }
@@ -197,12 +231,28 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
         const rvtFiles = allRevitFiles.map(version => {
             const folderPath = version._folderPath || '/';
             
-            // DEBUG: Log first file's extension data to see available fields
+            // DEBUG: Log first file's complete data to see available fields
             if (allRevitFiles.indexOf(version) === 0) {
-                console.log('=== SAMPLE FILE EXTENSION DATA ===');
+                console.log('=== SAMPLE FILE DEBUG DATA ===');
                 console.log('File:', version.attributes.displayName || version.attributes.name);
-                console.log('Extension:', JSON.stringify(version.attributes.extension, null, 2));
+                console.log('Attributes:', JSON.stringify(version.attributes, null, 2));
+                console.log('Relationships:', JSON.stringify(version.relationships, null, 2));
+                console.log('Attached Users:', {
+                    lastModifiedUser: version._lastModifiedUser,
+                    createUser: version._createUser
+                });
             }
+            
+            // Extract user information - prioritize attached user objects from included array
+            const lastModifiedUserName = version._lastModifiedUser?.name || 
+                                         version.attributes?.lastModifiedUserName;
+            const createUserName = version._createUser?.name || 
+                                   version.attributes?.createUserName;
+            const lastModifiedUserId = version.relationships?.lastModifiedUser?.data?.id;
+            const createUserId = version.relationships?.user?.data?.id;
+            
+            // Determine the best "published by" value
+            const publishedBy = lastModifiedUserName || createUserName || lastModifiedUserId || createUserId || null;
             
             return {
                 id: version.id,
@@ -228,8 +278,11 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
                              null,
                 // Folder path and folder ID for permission checking
                 folderPath: folderPath,
-                folderId: version._folderId, // Add folder ID for permission checking
-                publishedDate: version.attributes?.extension?.data?.publishedDate || null
+                folderId: version._folderId,
+                publishedDate: version.attributes?.extension?.data?.publishedDate || null,
+                // User information - now with proper user names from included array
+                lastModifiedUser: lastModifiedUserName || lastModifiedUserId || null,
+                publishedBy: publishedBy
             };
         });
 

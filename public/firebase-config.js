@@ -15,3 +15,15 @@ const firebaseConfig = {
 // Note: Firebase credentials are safe to use in client-side code as they
 // are meant to identify your Firebase project. Access control is handled by
 // Firebase Security Rules, not by keeping these credentials secret.
+
+// Initialize Firebase (if not already initialized)
+if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+    try {
+        firebase.initializeApp(firebaseConfig);
+        console.log('Firebase initialized successfully');
+    } catch (error) {
+        console.error('Firebase initialization error:', error);
+    }
+} else if (typeof firebase === 'undefined') {
+    console.error('Firebase SDK not loaded');
+}

@@ -14,6 +14,95 @@ const getDb = () => admin.firestore();
 const getAuth = () => admin.auth();
 
 /**
+ * Input Validation Functions
+ */
+function validateEmail(email) {
+    if (!email || typeof email !== 'string') {
+        return { valid: false, error: 'Email is required' };
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return { valid: false, error: 'Invalid email format' };
+    }
+    
+    if (email.length > 254) {
+        return { valid: false, error: 'Email too long' };
+    }
+    
+    return { valid: true, value: email.toLowerCase().trim() };
+}
+
+function validatePassword(password) {
+    if (!password || typeof password !== 'string') {
+        return { valid: false, error: 'Password is required' };
+    }
+    
+    if (password.length < 12) {
+        return { valid: false, error: 'Password must be at least 12 characters' };
+    }
+    
+    if (password.length > 128) {
+        return { valid: false, error: 'Password too long (max 128 characters)' };
+    }
+    
+    // Require complexity
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>_\-+=[\]\\\/~`]/.test(password);
+    
+    if (!(hasUpper && hasLower && hasNumber && hasSpecial)) {
+        return { 
+            valid: false, 
+            error: 'Password must contain uppercase, lowercase, number, and special character' 
+        };
+    }
+    
+    return { valid: true };
+}
+
+function validateNickname(nickname) {
+    if (!nickname || typeof nickname !== 'string') {
+        return { valid: false, error: 'Nickname is required' };
+    }
+    
+    const trimmed = nickname.trim();
+    if (trimmed.length < 3 || trimmed.length > 64) {
+        return { valid: false, error: 'Nickname must be 3-64 characters' };
+    }
+    
+    // Allow only alphanumeric, underscore, hyphen
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+        return { valid: false, error: 'Nickname can only contain letters, numbers, underscore, and hyphen' };
+    }
+    
+    return { valid: true, value: trimmed };
+}
+
+function maskCredential(credential) {
+    if (!credential || credential.length < 8) return '***';
+    return credential.substring(0, 4) + '***' + credential.substring(credential.length - 4);
+}
+
+
+/**
+ * Helper function to get encryption key (validates it exists)
+ */
+function getEncryptionKey() {
+    if (!process.env.ENCRYPTION_KEY) {
+        throw new Error('ENCRYPTION_KEY environment variable is not set');
+    }
+    
+    // Expect hex string (64 chars = 32 bytes)
+    if (process.env.ENCRYPTION_KEY.length !== 64) {
+        throw new Error('ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)');
+    }
+    
+    return Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+}
+
+/**
  * Helper function to decrypt user credentials
  */
 async function decryptUserCredentials(userId) {
@@ -29,7 +118,7 @@ async function decryptUserCredentials(userId) {
     if (userData.encryptedCredentials && userData.credentialsIV) {
         try {
             const algorithm = 'aes-256-cbc';
-            const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+            const key = getEncryptionKey();
             const iv = Buffer.from(userData.credentialsIV, 'hex');
             
             const decipher = crypto.createDecipheriv(algorithm, key, iv);
@@ -61,7 +150,7 @@ async function decryptUserCredentials(userId) {
 async function encryptUserCredentials(userId, clientId, clientSecret) {
     try {
         const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+        const key = getEncryptionKey();
         const iv = crypto.randomBytes(16);
         
         // Encrypt both credentials as a single JSON object
@@ -167,18 +256,21 @@ router.post('/register', async (req, res) => {
     try {
         const { email, password, licenseKey } = req.body;
         
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+        // Validate email
+        const emailValidation = validateEmail(email);
+        if (!emailValidation.valid) {
+            return res.status(400).json({ error: emailValidation.error });
         }
         
-        // Validate password strength
-        if (password.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        // Validate password
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.valid) {
+            return res.status(400).json({ error: passwordValidation.error });
         }
         
         // Create Firebase user (emailVerified will be false initially)
         const userRecord = await getAuth().createUser({
-            email: email,
+            email: emailValidation.value,
             password: password,
             emailVerified: false
         });
@@ -188,7 +280,7 @@ router.post('/register', async (req, res) => {
         
         // Create user document in Firestore
         await getDb().collection('users').doc(userRecord.uid).set({
-            email: email,
+            email: emailValidation.value,
             licenseKey: licenseKey || null,
             licenseExpiry: null,
             licenseStatus: 'pending',
@@ -205,11 +297,11 @@ router.post('/register', async (req, res) => {
         let emailSent = false;
         let emailError = null;
         try {
-            await emailService.sendVerificationEmail(email, verificationToken);
-            console.log(`✅ Verification email sent to: ${email}`);
+            await emailService.sendVerificationEmail(emailValidation.value, verificationToken);
+            console.log(`✅ Verification email sent to: ${maskCredential(emailValidation.value)}`);
             emailSent = true;
         } catch (error) {
-            console.error('❌ Failed to send verification email:', error);
+            console.error('❌ Failed to send verification email:', error.message);
             emailError = error.message;
             // Don't fail registration if email fails - admin can manually verify
         }

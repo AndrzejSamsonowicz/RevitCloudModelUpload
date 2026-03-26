@@ -2,6 +2,31 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const admin = require('firebase-admin');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+
+// ===== ENVIRONMENT VARIABLE VALIDATION =====
+const requiredEnvVars = [
+    'APS_CLIENT_ID',
+    'APS_CLIENT_SECRET',
+    'APS_CALLBACK_URL',
+    'ENCRYPTION_KEY'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+    console.error('❌ ERROR: Missing required environment variables:', missingVars);
+    console.error('Please check your .env file and ensure all required variables are set.');
+    process.exit(1);
+}
+
+// Validate ENCRYPTION_KEY length
+if (process.env.ENCRYPTION_KEY.length < 64) {
+    console.error('❌ ERROR: ENCRYPTION_KEY must be at least 64 characters (32 bytes in hex)');
+    console.error('Generate a secure key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    process.exit(1);
+}
 
 // Initialize services
 const designAutomation = require('./services/designAutomation');
@@ -56,26 +81,132 @@ console.log('✓ WorkItem Poller initialized');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ===== SECURITY MIDDLEWARE =====
+
+// 1. Helmet - Security Headers
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: [
+                "'self'", 
+                "https://www.gstatic.com", 
+                "https://apis.google.com"
+            ],
+            styleSrc: [
+                "'self'", 
+                "'unsafe-inline'", // Still needed for inline styles in HTML
+                "https://fonts.googleapis.com"
+            ],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: [
+                "'self'", 
+                "https://developer.api.autodesk.com",
+                "https://firebasestorage.googleapis.com",
+                "https://firestore.googleapis.com",
+                "https://identitytoolkit.googleapis.com",
+                "https://securetoken.googleapis.com",
+                "https://*.firebaseio.com"
+            ],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+            objectSrc: ["'none'"],
+            frameSrc: ["https://www.youtube.com"], // For video modals
+            upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+        }
+    },
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    }
+}));
+
+// 2. CORS Protection
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    process.env.FRONTEND_URL,
+    process.env.PRODUCTION_URL
+].filter(Boolean); // Remove undefined values
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, postman, etc)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            console.warn(`CORS blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// 3. HTTPS Enforcement in Production
+if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+        if (req.header('x-forwarded-proto') !== 'https') {
+            res.redirect(`https://${req.header('host')}${req.url}`);
+        } else {
+            next();
+        }
+    });
+}
+
+// 4. Request Size Limits
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 5. Rate Limiting
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests from this IP, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 attempts per 15 minutes
+    message: { error: 'Too many authentication attempts, please try again later' },
+    skipSuccessfulRequests: true,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Log all incoming requests
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - IP: ${req.ip}`);
     next();
 });
 
-// API Routes
-app.use('/oauth', authRoutes);
-app.use('/api/design-automation', designAutomationRoutes);
-app.use('/api/data-management', dataManagementRoutes);
-app.use('/api/auth', firebaseAuthRoutes);
-app.use('/api/admin', adminToolsRoutes);
-app.use('/api', licenseRoutes);
-app.use('/webhooks', webhookRoutes);
-app.use('/api/workitem-status', workitemStatusRoutes);
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
+// API Routes with rate limiting
+app.use('/oauth', authLimiter, authRoutes);
+app.use('/api/auth', authLimiter, firebaseAuthRoutes);
+app.use('/api/design-automation', apiLimiter, designAutomationRoutes);
+app.use('/api/data-management', apiLimiter, dataManagementRoutes);
+app.use('/api/admin', apiLimiter, adminToolsRoutes);
+app.use('/api', apiLimiter, licenseRoutes);
+app.use('/webhooks', webhookRoutes); // No rate limit on webhooks
+app.use('/api/workitem-status', apiLimiter, workitemStatusRoutes);
 
 // Serve frontend pages
 app.get('/', (req, res) => {
@@ -90,10 +221,6 @@ app.get('/register', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
-app.get('/reset-password', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
-});
-
 app.get('/purchase', (req, res) => {
     res.sendFile(path.join(__dirname, 'purchase.html'));
 });
@@ -102,17 +229,33 @@ app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
-app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
-    console.error('Error:', err);
-    res.status(500).json({ 
-        error: err.message || 'Internal server error',
-        details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    // Log full error server-side
+    console.error('[Error Handler]', {
+        message: err.message,
+        stack: err.stack,
+        url: req.url,
+        method: req.method,
+        ip: req.ip,
+        timestamp: new Date().toISOString()
     });
+    
+    // Determine status code
+    const statusCode = err.statusCode || err.status || 500;
+    
+    // Send sanitized error to client
+    const isClientError = statusCode < 500;
+    const message = isClientError ? err.message : 'Internal server error';
+    
+    const errorResponse = { error: message };
+    
+    // Only include stack trace in local development
+    if (process.env.NODE_ENV === 'development' && req.ip === '::1' || req.ip === '127.0.0.1') {
+        errorResponse.stack = err.stack;
+    }
+    
+    res.status(statusCode).json(errorResponse);
 });
 
 app.listen(PORT, () => {

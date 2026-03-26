@@ -103,6 +103,12 @@ class WorkItemPoller {
                 }
             }
         }
+        
+        // Stop poller if no items left after cleanup
+        if (this.activeWorkItems.size === 0) {
+            console.log('[WorkItemPoller] No active items remaining, stopping poller');
+            this.stop();
+        }
     }
 
     /**

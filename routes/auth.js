@@ -6,6 +6,45 @@ const { decryptUserCredentials, encryptUserCredentials, verifyFirebaseToken } = 
 
 // Store user sessions (in production, use Redis or database)
 const sessions = new Map();
+const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Session cleanup function - removes expired sessions
+ */
+function cleanExpiredSessions() {
+    const now = Date.now();
+    let cleanedCount = 0;
+    
+    for (const [sessionId, session] of sessions.entries()) {
+        if (now - session.timestamp > SESSION_TIMEOUT) {
+            sessions.delete(sessionId);
+            cleanedCount++;
+        }
+    }
+    
+    if (cleanedCount > 0) {
+        console.log(`[Session Cleanup] Removed ${cleanedCount} expired sessions`);
+    }
+}
+
+/**
+ * Check if session is valid (exists and not expired)
+ */
+function isSessionValid(sessionId) {
+    const session = sessions.get(sessionId);
+    if (!session) return false;
+    
+    if (Date.now() - session.timestamp > SESSION_TIMEOUT) {
+        sessions.delete(sessionId);
+        return false;
+    }
+    return true;
+}
+
+// Run cleanup every hour
+setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+console.log('✓ Session cleanup scheduler initialized');
+
 
 /**
  * Initiate 3-legged OAuth flow with user-specific credentials
@@ -144,11 +183,11 @@ router.get('/callback', async (req, res) => {
  * Get current user session info
  */
 router.get('/session/:sessionId', (req, res) => {
-    const session = sessions.get(req.params.sessionId);
-    
-    if (!session) {
-        return res.status(404).json({ error: 'Session not found' });
+    if (!isSessionValid(req.params.sessionId)) {
+        return res.status(404).json({ error: 'Session not found or expired' });
     }
+    
+    const session = sessions.get(req.params.sessionId);
 
     res.json({
         authenticated: true,

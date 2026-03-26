@@ -66,7 +66,19 @@ function updateTimeSinceCells() {
 // Load credentials from Firestore
 async function loadCredentialsFromFirestore() {
     try {
-        const user = firebase.auth().currentUser;
+        // Wait for Firebase auth to be ready
+        const user = await new Promise((resolve) => {
+            const currentUser = firebase.auth().currentUser;
+            if (currentUser) {
+                resolve(currentUser);
+            } else {
+                const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+                    unsubscribe();
+                    resolve(user);
+                });
+            }
+        });
+        
         if (!user) {
             console.log('[Credentials] No user logged in');
             return { clientId: '', clientSecret: '' };
@@ -82,7 +94,16 @@ async function loadCredentialsFromFirestore() {
         console.log('[Credentials] Load response status:', response.status);
         
         if (!response.ok) {
-            console.error('[Credentials] Failed to load credentials from Firestore');
+            console.error('[Credentials] Failed to load credentials from Firestore. Status:', response.status);
+            
+            // Try to get more error details
+            try {
+                const errorData = await response.json();
+                console.error('[Credentials] Error details:', errorData);
+            } catch (e) {
+                console.error('[Credentials] Could not parse error response');
+            }
+            
             return { clientId: '', clientSecret: '' };
         }
         
@@ -92,8 +113,8 @@ async function loadCredentialsFromFirestore() {
         console.log('[Credentials] ClientSecret length:', data.credentials?.clientSecret?.length || 0);
         
         return {
-            clientId: data.credentials.clientId || '',
-            clientSecret: data.credentials.clientSecret || ''
+            clientId: data.credentials?.clientId || '',
+            clientSecret: data.credentials?.clientSecret || ''
         };
     } catch (error) {
         console.error('[Credentials] Load credentials error:', error);
@@ -112,14 +133,41 @@ async function showCredentialsModal() {
     
     modal.style.display = 'block';
     
-    // Load from Firestore
-    const { clientId, clientSecret } = await loadCredentialsFromFirestore();
-    
-    document.getElementById('clientIdInput').value = clientId || '';
-    document.getElementById('clientSecretInput').value = clientSecret || '';
-    
-    messageDiv.textContent = '';
-    messageDiv.style.display = 'none';
+    try {
+        // Load from Firestore
+        const { clientId, clientSecret } = await loadCredentialsFromFirestore();
+        
+        document.getElementById('clientIdInput').value = clientId || '';
+        document.getElementById('clientSecretInput').value = clientSecret || '';
+        
+        if (!clientId && !clientSecret) {
+            // No credentials stored yet - this is normal for new users
+            messageDiv.textContent = 'No credentials saved yet. Enter your APS credentials below.';
+            messageDiv.style.backgroundColor = '#fff3cd';
+            messageDiv.style.color = '#856404';
+            messageDiv.style.display = 'block';
+            
+            // Hide message after 3 seconds
+            setTimeout(() => {
+                messageDiv.textContent = '';
+                messageDiv.style.display = 'none';
+            }, 3000);
+        } else {
+            // Credentials loaded successfully
+            messageDiv.textContent = '';
+            messageDiv.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('[Credentials Modal] Error:', error);
+        messageDiv.textContent = 'Error loading credentials. You can still enter them manually.';
+        messageDiv.style.backgroundColor = '#f8d7da';
+        messageDiv.style.color = '#721c24';
+        messageDiv.style.display = 'block';
+        
+        // Clear inputs
+        document.getElementById('clientIdInput').value = '';
+        document.getElementById('clientSecretInput').value = '';
+    }
 }
 
 function closeCredentialsModal() {
@@ -279,8 +327,100 @@ function hideLoadingModal() {
     modal.style.display = 'none';
 }
 
+// Cleanup intervals when page is unloaded to prevent memory leaks
+window.addEventListener('beforeunload', () => {
+    if (timeSincePublishInterval) {
+        clearInterval(timeSincePublishInterval);
+        timeSincePublishInterval = null;
+    }
+    if (historyRefreshInterval) {
+        clearInterval(historyRefreshInterval);
+        historyRefreshInterval = null;
+    }
+    console.log('Cleaned up intervals before page unload');
+});
+
+// Initialize event listeners for buttons (replaces inline onclick handlers)
+function initializeEventListeners() {
+    // Login/Logout buttons
+    const loginScreenLogoutBtn = document.getElementById('loginScreenLogoutBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const logoutBtn2 = document.getElementById('logoutBtn2');
+    const licenseLogoutBtn = document.getElementById('licenseLogoutBtn');
+    const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsBtn2 = document.getElementById('settingsBtn2');
+    const loginBtn = document.getElementById('loginBtn');
+    const autodeskLoginBtn = document.getElementById('autodeskLoginBtn');
+    
+    if (loginScreenLogoutBtn) loginScreenLogoutBtn.addEventListener('click', logout);
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+    if (logoutBtn2) logoutBtn2.addEventListener('click', logout);
+    if (licenseLogoutBtn) licenseLogoutBtn.addEventListener('click', handleLogout);
+    if (headerLogoutBtn) headerLogoutBtn.addEventListener('click', handleLogout);
+    if (settingsBtn) settingsBtn.addEventListener('click', showCredentialsModal);
+    if (settingsBtn2) settingsBtn2.addEventListener('click', showCredentialsModal);
+    if (loginBtn) loginBtn.addEventListener('click', login);
+    if (autodeskLoginBtn) autodeskLoginBtn.addEventListener('click', login);
+    
+    // File selection buttons
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const deselectAllBtn = document.getElementById('deselectAllBtn');
+    if (selectAllBtn) selectAllBtn.addEventListener('click', selectAllFiles);
+    if (deselectAllBtn) deselectAllBtn.addEventListener('click', deselectAllFiles);
+    
+    // Publishing buttons
+    const publishNowBtn = document.getElementById('publishNowBtn');
+    const publishBtn = document.getElementById('publishBtn');
+    const saveSchedulesBtn = document.getElementById('saveSchedulesBtn');
+    const showHistoryBtn = document.getElementById('showHistoryBtn');
+    if (publishNowBtn) publishNowBtn.addEventListener('click', publishModel);
+    if (publishBtn) publishBtn.addEventListener('click', publishModel);
+    if (saveSchedulesBtn) saveSchedulesBtn.addEventListener('click', savePublishingSchedules);
+    if (showHistoryBtn) showHistoryBtn.addEventListener('click', showPublishingHistory);
+    
+    // Modal close buttons
+    const closeCredentialsBtn = document.getElementById('closeCredentialsBtn');
+    const closeVideoBtn = document.getElementById('closeVideoBtn');
+    const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+    if (closeCredentialsBtn) closeCredentialsBtn.addEventListener('click', closeCredentialsModal);
+    if (closeVideoBtn) closeVideoBtn.addEventListener('click', closeVideoModal);
+    if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', closePublishingHistory);
+    
+    // Credentials modal buttons
+    const openApsGuideBtn = document.getElementById('openApsGuideBtn');
+    const openAddUrlVideoBtn = document.getElementById('openAddUrlVideoBtn');
+    const openCustomIntegrationVideoBtn = document.getElementById('openCustomIntegrationVideoBtn');
+    const openCopyClientIdVideoBtn = document.getElementById('openCopyClientIdVideoBtn');
+    const saveCredentialsBtn = document.getElementById('saveCredentialsBtn');
+    if (openApsGuideBtn) openApsGuideBtn.addEventListener('click', openApsGuide);
+    if (openAddUrlVideoBtn) openAddUrlVideoBtn.addEventListener('click', openAddUrlVideo);
+    if (openCustomIntegrationVideoBtn) openCustomIntegrationVideoBtn.addEventListener('click', openCustomIntegrationVideo);
+    if (openCopyClientIdVideoBtn) openCopyClientIdVideoBtn.addEventListener('click', openCopyClientIdVideo);
+    if (saveCredentialsBtn) saveCredentialsBtn.addEventListener('click', saveCredentials);
+    
+    // History buttons
+    const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+    const downloadReportBtn = document.getElementById('downloadReportBtn');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    if (refreshHistoryBtn) refreshHistoryBtn.addEventListener('click', refreshPublishingHistory);
+    if (downloadReportBtn) downloadReportBtn.addEventListener('click', downloadHistoryReport);
+    if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', clearPublishingHistory);
+    
+    // Filter inputs
+    const hubFilter = document.getElementById('hubFilter');
+    const projectFilter = document.getElementById('projectFilter');
+    if (hubFilter) hubFilter.addEventListener('input', filterHubs);
+    if (projectFilter) projectFilter.addEventListener('input', filterProjects);
+    
+    console.log('Event listeners initialized');
+}
+
 // Check for session on page load
 window.addEventListener('DOMContentLoaded', async () => {
+    // Initialize event listeners
+    initializeEventListeners();
+    
     const params = new URLSearchParams(window.location.search);
     
     // Check Firebase authentication first
@@ -976,10 +1116,15 @@ async function publishModelToBim360(itemId, projectId) {
 function showMessage(elementId, message, type) {
     const element = document.getElementById(elementId);
     if (!element) return; // Skip if element doesn't exist
-    element.innerHTML = `<div class="alert ${type}">${message}</div>`;
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${type}`;
+    alertDiv.textContent = message;
+    element.innerHTML = '';
+    element.appendChild(alertDiv);
     
     setTimeout(() => {
-        if (element && element.innerHTML.includes(message)) {
+        if (element && element.firstChild) {
             element.innerHTML = '';
         }
     }, 5000);
@@ -994,13 +1139,26 @@ function showToast(title, message, type = 'info') {
     
     const toast = document.createElement('div');
     toast.className = `toast-notification ${type}`;
-    toast.innerHTML = `
-        <div class="toast-icon">${icons[type] || icons.info}</div>
-        <div class="toast-content">
-            <div class="toast-title">${title}</div>
-            <div class="toast-message">${message}</div>
-        </div>
-    `;
+    
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'toast-icon';
+    iconDiv.textContent = icons[type] || icons.info;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'toast-content';
+    
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'toast-title';
+    titleDiv.textContent = title;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'toast-message';
+    messageDiv.textContent = message;
+    
+    contentDiv.appendChild(titleDiv);
+    contentDiv.appendChild(messageDiv);
+    toast.appendChild(iconDiv);
+    toast.appendChild(contentDiv);
     
     document.body.appendChild(toast);
     
@@ -1065,7 +1223,7 @@ async function loadHubs() {
             hubsList.innerHTML = `
                 <div class="no-items" style="padding: 30px; line-height: 1.6; color: #dc3545;">
                     <p style="margin-bottom: 15px; font-weight: bold;">Error loading hubs</p>
-                    <p style="margin-bottom: 15px;">${data.error}</p>
+                    <p style="margin-bottom: 15px;">${sanitizeHTML(data.error)}</p>
                     <p style="color: #666;">Please try clicking "Login with Autodesk" button above to reconnect.</p>
                 </div>
             `;
@@ -1074,7 +1232,7 @@ async function loadHubs() {
         hubsList.innerHTML = `
             <div class="no-items" style="padding: 30px; line-height: 1.6; color: #dc3545;">
                 <p style="margin-bottom: 15px; font-weight: bold;">Failed to load hubs</p>
-                <p style="margin-bottom: 15px;">${error.message}</p>
+                <p style="margin-bottom: 15px;">${sanitizeHTML(error.message)}</p>
                 <p style="color: #666;">Please try clicking "Login with Autodesk" button above to reconnect.</p>
             </div>
         `;
@@ -1085,7 +1243,11 @@ function displayHubs(hubsData) {
     const hubsList = document.getElementById('hubsList');
     
     if (!hubsData || !hubsData.data || hubsData.data.length === 0) {
-        hubsList.innerHTML = '<div class="no-items">No hubs found</div>';
+        const noItems = document.createElement('div');
+        noItems.className = 'no-items';
+        noItems.textContent = 'No hubs found';
+        hubsList.innerHTML = '';
+        hubsList.appendChild(noItems);
         return;
     }
 
@@ -1096,25 +1258,36 @@ function displayHubs(hubsData) {
     });
 
     if (bim360Hubs.length === 0) {
-        hubsList.innerHTML = '<div class="no-items">No BIM 360 Account hubs found</div>';
+        const noItems = document.createElement('div');
+        noItems.className = 'no-items';
+        noItems.textContent = 'No BIM 360 Account hubs found';
+        hubsList.innerHTML = '';
+        hubsList.appendChild(noItems);
         return;
     }
 
-    let hubsHTML = '';
+    hubsList.innerHTML = '';
     bim360Hubs.forEach(hub => {
         const hubName = hub.attributes.name;
         const hubId = hub.id;
         const region = hub.attributes.region || 'US';
         
-        hubsHTML += `
-            <div class="hub-item" onclick="selectHub('${hubId}', '${hubName.replace(/'/g, "\\'")}', '${region}')">
-                <div class="hub-name">${hubName}</div>
-                <div class="hub-region">${region}</div>
-            </div>
-        `;
+        const hubItem = document.createElement('div');
+        hubItem.className = 'hub-item';
+        hubItem.onclick = () => selectHub(hubId, hubName, region);
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'hub-name';
+        nameDiv.textContent = hubName;
+        
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'hub-region';
+        regionDiv.textContent = region;
+        
+        hubItem.appendChild(nameDiv);
+        hubItem.appendChild(regionDiv);
+        hubsList.appendChild(hubItem);
     });
-
-    hubsList.innerHTML = hubsHTML;
 }
 
 function filterHubs() {
@@ -1166,7 +1339,11 @@ async function selectHub(hubId, hubName, region) {
     
     // Load projects
     const projectsList = document.getElementById('projectsList');
-    projectsList.innerHTML = '<div class="no-items">Loading projects...</div>';
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'no-items';
+    loadingDiv.textContent = 'Loading projects...';
+    projectsList.innerHTML = '';
+    projectsList.appendChild(loadingDiv);
     
     try {
         const response = await fetch(`/api/data-management/hubs/${hubId}/projects`, {
@@ -1179,10 +1356,18 @@ async function selectHub(hubId, hubName, region) {
             displayProjects(data);
             showMessage('publishMessage', `Found ${data.data.length} projects in ${hubName}`, 'success');
         } else {
-            projectsList.innerHTML = '<div class="no-items">Error loading projects</div>';
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'no-items';
+            errorDiv.textContent = 'Error loading projects';
+            projectsList.innerHTML = '';
+            projectsList.appendChild(errorDiv);
         }
     } catch (error) {
-        projectsList.innerHTML = '<div class="no-items">Failed to load projects</div>';
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'no-items';
+        errorDiv.textContent = 'Failed to load projects';
+        projectsList.innerHTML = '';
+        projectsList.appendChild(errorDiv);
         showMessage('publishMessage', `Failed to load projects: ${error.message}`, 'error');
     }
 }
@@ -1191,23 +1376,26 @@ function displayProjects(projectsData) {
     const projectsList = document.getElementById('projectsList');
     
     if (!projectsData || !projectsData.data || projectsData.data.length === 0) {
-        projectsList.innerHTML = '<div class="no-items">No projects found</div>';
+        const noItems = document.createElement('div');
+        noItems.className = 'no-items';
+        noItems.textContent = 'No projects found';
+        projectsList.innerHTML = '';
+        projectsList.appendChild(noItems);
         return;
     }
 
-    let projectsHTML = '';
+    projectsList.innerHTML = '';
     projectsData.data.forEach(project => {
         const projectName = project.attributes.name;
         const projectId = project.id;
         
-        projectsHTML += `
-            <div class="project-item" onclick="selectProject('${projectId}', '${projectName.replace(/'/g, "\\'")}')">
-                ${projectName}
-            </div>
-        `;
+        const projectItem = document.createElement('div');
+        projectItem.className = 'project-item';
+        projectItem.textContent = projectName;
+        projectItem.onclick = () => selectProject(projectId, projectName);
+        
+        projectsList.appendChild(projectItem);
     });
-
-    projectsList.innerHTML = projectsHTML;
 }
 
 function filterProjects() {
@@ -1277,9 +1465,10 @@ async function selectProject(projectId, projectName) {
 
 let allRevitFiles = [];
 
-// File cache with TTL (5 minutes)
+// File cache with TTL (5 minutes) and size limit
 const fileCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 10; // Maximum number of projects to cache
 
 function getCachedFiles(projectId) {
     const cached = fileCache.get(projectId);
@@ -1291,6 +1480,13 @@ function getCachedFiles(projectId) {
 }
 
 function setCachedFiles(projectId, files) {
+    // Enforce cache size limit - remove oldest entry if at limit
+    if (fileCache.size >= MAX_CACHE_SIZE && !fileCache.has(projectId)) {
+        const oldestKey = fileCache.keys().next().value;
+        fileCache.delete(oldestKey);
+        console.log(`Cache full, removed oldest entry: ${oldestKey}`);
+    }
+    
     fileCache.set(projectId, {
         files: files,
         timestamp: Date.now()
@@ -1379,7 +1575,13 @@ async function loadRevitFilesFromMultipleFolders(projectId, folders, forceRefres
         const filesList = document.getElementById('rvtFilesList');
         
         if (allFiles.length === 0) {
-            filesList.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No Revit cloud models found</div>';
+            const noFilesDiv = document.createElement('div');
+            noFilesDiv.style.color = '#999';
+            noFilesDiv.style.textAlign = 'center';
+            noFilesDiv.style.padding = '20px';
+            noFilesDiv.textContent = 'No Revit cloud models found';
+            filesList.innerHTML = '';
+            filesList.appendChild(noFilesDiv);
             allRevitFiles = [];
             document.getElementById('publishingActions').style.display = 'none';
             hideLoadingModal();
@@ -1577,7 +1779,13 @@ async function loadRevitFiles(projectId, folderId) {
             const filesList = document.getElementById('rvtFilesList');
             
             if (!data.files || data.files.length === 0) {
-                filesList.innerHTML = '<div style="color: #999; text-align: center; padding: 20px;">No Revit cloud models found</div>';
+                const noFilesDiv = document.createElement('div');
+                noFilesDiv.style.color = '#999';
+                noFilesDiv.style.textAlign = 'center';
+                noFilesDiv.style.padding = '20px';
+                noFilesDiv.textContent = 'No Revit cloud models found';
+                filesList.innerHTML = '';
+                filesList.appendChild(noFilesDiv);
                 allRevitFiles = [];
                 document.getElementById('publishingActions').style.display = 'none';
                 hideLoadingModal();
@@ -1646,6 +1854,10 @@ function sortFiles(column) {
             case 'fileType':
                 valueA = a.modelType === 'singleuser' ? 'RCM' : 'C4R';
                 valueB = b.modelType === 'singleuser' ? 'RCM' : 'C4R';
+                break;
+            case 'publishedBy':
+                valueA = (a.publishedBy || a.lastModifiedUser || 'N/A').toLowerCase();
+                valueB = (b.publishedBy || b.lastModifiedUser || 'N/A').toLowerCase();
                 break;
         }
         
@@ -1720,7 +1932,7 @@ function renderFilesList() {
     thName.style.maxWidth = '33vw';
     thName.style.whiteSpace = 'normal';
     thName.style.wordBreak = 'break-word';
-    thName.innerHTML = `Name${getSortIndicator('name')}`;
+    thName.textContent = `Name${getSortIndicator('name')}`;
     thName.onclick = () => sortFiles('name');
     
     // Version column
@@ -1732,7 +1944,7 @@ function renderFilesList() {
     thVersion.style.cursor = 'pointer';
     thVersion.style.userSelect = 'none';
     thVersion.style.whiteSpace = 'nowrap';
-    thVersion.innerHTML = `Version${getSortIndicator('version')}`;
+    thVersion.textContent = `Version${getSortIndicator('version')}`;
     thVersion.onclick = () => sortFiles('version');
     
     // File Type column
@@ -1744,7 +1956,7 @@ function renderFilesList() {
     thFileType.style.cursor = 'pointer';
     thFileType.style.userSelect = 'none';
     thFileType.style.whiteSpace = 'nowrap';
-    thFileType.innerHTML = `File Type${getSortIndicator('fileType')}`;
+    thFileType.textContent = `File Type${getSortIndicator('fileType')}`;
     thFileType.onclick = () => sortFiles('fileType');
     
     // Folder Path column
@@ -1756,7 +1968,7 @@ function renderFilesList() {
     thPath.style.cursor = 'pointer';
     thPath.style.userSelect = 'none';
     thPath.style.whiteSpace = 'nowrap';
-    thPath.innerHTML = `Folder Path${getSortIndicator('path')}`;
+    thPath.textContent = `Folder Path${getSortIndicator('path')}`;
     thPath.onclick = () => sortFiles('path');
     
     // Publish Date column
@@ -1768,7 +1980,7 @@ function renderFilesList() {
     thDate.style.cursor = 'pointer';
     thDate.style.userSelect = 'none';
     thDate.style.whiteSpace = 'nowrap';
-    thDate.innerHTML = `Publish Date${getSortIndicator('date')}`;
+    thDate.textContent = `Publish Date${getSortIndicator('date')}`;
     thDate.onclick = () => sortFiles('date');
     
     // Time Since Publish column
@@ -1780,8 +1992,20 @@ function renderFilesList() {
     thTimeSince.style.cursor = 'pointer';
     thTimeSince.style.userSelect = 'none';
     thTimeSince.style.whiteSpace = 'nowrap';
-    thTimeSince.innerHTML = `Time Since Publish${getSortIndicator('timeSince')}`;
+    thTimeSince.textContent = `Time Since Publish${getSortIndicator('timeSince')}`;
     thTimeSince.onclick = () => sortFiles('timeSince');
+    
+    // Published by column
+    const thPublishedBy = document.createElement('th');
+    thPublishedBy.style.padding = '8px';
+    thPublishedBy.style.textAlign = 'left';
+    thPublishedBy.style.borderBottom = '2px solid #ddd';
+    thPublishedBy.style.borderRight = '1px solid #ddd';
+    thPublishedBy.style.cursor = 'pointer';
+    thPublishedBy.style.userSelect = 'none';
+    thPublishedBy.style.whiteSpace = 'nowrap';
+    thPublishedBy.textContent = `Published by${getSortIndicator('publishedBy')}`;
+    thPublishedBy.onclick = () => sortFiles('publishedBy');
     
     // Publishing Time column
     const thPublishTime = document.createElement('th');
@@ -1789,7 +2013,7 @@ function renderFilesList() {
     thPublishTime.style.textAlign = 'left';
     thPublishTime.style.borderBottom = '2px solid #ddd';
     thPublishTime.style.whiteSpace = 'nowrap';
-    thPublishTime.innerHTML = `Publishing Time`;
+    thPublishTime.textContent = 'Publishing Time';
     
     headerRow.appendChild(thCheckbox);
     headerRow.appendChild(thName);
@@ -1798,6 +2022,7 @@ function renderFilesList() {
     headerRow.appendChild(thPath);
     headerRow.appendChild(thDate);
     headerRow.appendChild(thTimeSince);
+    headerRow.appendChild(thPublishedBy);
     headerRow.appendChild(thPublishTime);
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -1857,9 +2082,17 @@ function renderFilesList() {
         const tdCheckbox = document.createElement('td');
         tdCheckbox.style.padding = '8px';
         tdCheckbox.style.borderRight = '1px solid #ddd';
-        const disabledAttr = canPublish ? '' : ' disabled';
-        const disabledTitle = canPublish ? '' : ' title="Insufficient permissions"';
-        tdCheckbox.innerHTML = `<input type="checkbox" id="${checkboxId}" onchange="updateFileSelection()" onclick="event.stopPropagation()"${disabledAttr}${disabledTitle}>`;
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = checkboxId;
+        checkbox.onchange = updateFileSelection;
+        checkbox.onclick = (e) => e.stopPropagation();
+        if (!canPublish) {
+            checkbox.disabled = true;
+            checkbox.title = 'Insufficient permissions';
+        }
+        tdCheckbox.appendChild(checkbox);
         
         const tdName = document.createElement('td');
         tdName.style.padding = '8px';
@@ -1872,7 +2105,7 @@ function renderFilesList() {
         // Add permission indicator to file name if permissions were checked
         if (permissionsChecked && !canPublish) {
             const lockIcon = document.createElement('span');
-            lockIcon.innerHTML = ' 🔒';
+            lockIcon.textContent = ' 🔒';
             lockIcon.title = 'Insufficient permissions (requires Edit or Manage)';
             lockIcon.style.fontSize = '12px';
             lockIcon.style.opacity = '0.6';
@@ -1902,10 +2135,15 @@ function renderFilesList() {
         // singleuser = RCM (Revit Cloud Model)
         // multiuser = C4R (Cloud Worksharing)
         const isRCM = file.modelType === 'singleuser';
-        const fileTypeBadge = isRCM 
-            ? '<span style="background: #6f42c1; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 500; font-size: 11px;">RCM</span>'
-            : '<span style="background: #17a2b8; color: white; padding: 3px 10px; border-radius: 12px; font-weight: 500; font-size: 11px;">C4R</span>';
-        tdFileType.innerHTML = fileTypeBadge;
+        const badge = document.createElement('span');
+        badge.style.background = isRCM ? '#6f42c1' : '#17a2b8';
+        badge.style.color = 'white';
+        badge.style.padding = '3px 10px';
+        badge.style.borderRadius = '12px';
+        badge.style.fontWeight = '500';
+        badge.style.fontSize = '11px';
+        badge.textContent = isRCM ? 'RCM' : 'C4R';
+        tdFileType.appendChild(badge);
         
         const tdPath = document.createElement('td');
         tdPath.style.padding = '8px';
@@ -1936,6 +2174,14 @@ function renderFilesList() {
         tdTimeSince.style.color = '#666';
         tdTimeSince.textContent = timeSincePublish;
         
+        const tdPublishedBy = document.createElement('td');
+        tdPublishedBy.style.padding = '8px';
+        tdPublishedBy.style.borderRight = '1px solid #ddd';
+        tdPublishedBy.style.fontSize = '12px';
+        tdPublishedBy.style.color = '#666';
+        tdPublishedBy.style.whiteSpace = 'nowrap';
+        tdPublishedBy.textContent = file.publishedBy || file.lastModifiedUser || 'N/A';
+        
         const tdPublishTime = document.createElement('td');
         tdPublishTime.style.padding = '8px';
         tdPublishTime.style.whiteSpace = 'nowrap';
@@ -1947,7 +2193,7 @@ function renderFilesList() {
         }).join('');
         
         tdPublishTime.innerHTML = `
-            <div style="display: flex; flex-direction: column; gap: 4px;" onclick="event.stopPropagation()">
+            <div style="display: flex; flex-direction: column; gap: 4px;" class="publish-time-container">
                 <div style="display: flex; gap: 3px; flex-wrap: wrap;">
                     <label style="font-size: 11px; cursor: pointer; padding: 2px 4px; border: 1px solid #ddd; border-radius: 3px; user-select: none;" title="Monday">
                         <input type="checkbox" class="weekday-checkbox" data-file-id="${file.id}" data-day="1" style="margin: 0; vertical-align: middle;"> M
@@ -1997,6 +2243,12 @@ function renderFilesList() {
             </div>
         `;
         
+        // Add event listener to prevent row click from interfering with scheduler controls
+        const publishTimeContainer = tdPublishTime.querySelector('.publish-time-container');
+        if (publishTimeContainer) {
+            publishTimeContainer.addEventListener('click', (e) => e.stopPropagation());
+        }
+        
         tr.appendChild(tdCheckbox);
         tr.appendChild(tdName);
         tr.appendChild(tdVersion);
@@ -2004,6 +2256,7 @@ function renderFilesList() {
         tr.appendChild(tdPath);
         tr.appendChild(tdDate);
         tr.appendChild(tdTimeSince);
+        tr.appendChild(tdPublishedBy);
         tr.appendChild(tdPublishTime);
         
         // Click on row toggles checkbox (only if not disabled)
