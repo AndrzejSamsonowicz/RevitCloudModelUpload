@@ -126,6 +126,8 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://34.65.169.15:3000', // VM IP address
+    'http://rvtpub.digibuild.ch:3000', // Custom domain
+    'http://rvtpub.digibuild.ch', // Custom domain without port
     process.env.FRONTEND_URL,
     process.env.PRODUCTION_URL
 ].filter(Boolean); // Remove undefined values
