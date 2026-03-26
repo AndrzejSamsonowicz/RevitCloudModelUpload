@@ -134,17 +134,41 @@ async function showCredentialsModal() {
     modal.style.display = 'block';
     
     try {
-        // Load from Firestore
-        const { clientId, clientSecret } = await loadCredentialsFromFirestore();
+        // Load active credentials (either user's or server defaults)
+        const idToken = await firebase.auth().currentUser.getIdToken();
+        const response = await fetch('/api/auth/user/active-credentials', {
+            headers: {
+                'Authorization': `Bearer ${idToken}`
+            }
+        });
         
-        document.getElementById('clientIdInput').value = clientId || '';
-        document.getElementById('clientSecretInput').value = clientSecret || '';
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         
-        if (!clientId && !clientSecret) {
-            // No credentials stored yet - this is normal for new users
-            messageDiv.textContent = 'No credentials saved yet. Enter your APS credentials below.';
+        const data = await response.json();
+        
+        document.getElementById('clientIdInput').value = data.clientId || '';
+        document.getElementById('clientSecretInput').value = data.clientSecret || '';
+        
+        if (data.source === 'server') {
+            // Using server defaults
+            messageDiv.innerHTML = `
+                <strong>ℹ️ Using Server Default Credentials</strong><br>
+                You are currently using shared credentials from the server.<br>
+                To use your own APS application, enter your credentials below and click Save.
+            `;
             messageDiv.style.backgroundColor = '#fff3cd';
             messageDiv.style.color = '#856404';
+            messageDiv.style.display = 'block';
+        } else if (data.source === 'personal') {
+            // Using personal credentials
+            messageDiv.innerHTML = `
+                <strong>✓ Using Your Personal Credentials</strong><br>
+                You are using your own APS application credentials.
+            `;
+            messageDiv.style.backgroundColor = '#d4edda';
+            messageDiv.style.color = '#155724';
             messageDiv.style.display = 'block';
             
             // Hide message after 3 seconds
@@ -153,9 +177,11 @@ async function showCredentialsModal() {
                 messageDiv.style.display = 'none';
             }, 3000);
         } else {
-            // Credentials loaded successfully
-            messageDiv.textContent = '';
-            messageDiv.style.display = 'none';
+            // No credentials
+            messageDiv.textContent = 'No credentials configured. Please enter your APS credentials below.';
+            messageDiv.style.backgroundColor = '#f8d7da';
+            messageDiv.style.color = '#721c24';
+            messageDiv.style.display = 'block';
         }
     } catch (error) {
         console.error('[Credentials Modal] Error:', error);

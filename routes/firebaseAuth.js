@@ -734,6 +734,60 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
 });
 
 /**
+ * GET /api/auth/user/active-credentials
+ * Get active APS credentials (user's personal or server defaults with fallback indicator)
+ */
+router.get('/user/active-credentials', verifyFirebaseToken, async (req, res) => {
+    try {
+        console.log(`[Active Credentials] Loading for user: ${req.userId}`);
+        
+        // Try to get user's personal credentials
+        const credentials = await decryptUserCredentials(req.userId);
+        
+        if (credentials && credentials.clientId && credentials.clientSecret) {
+            // User has personal credentials
+            console.log('[Active Credentials] Using user personal credentials');
+            return res.json({
+                success: true,
+                clientId: credentials.clientId,
+                clientSecret: credentials.clientSecret,
+                source: 'personal',
+                message: 'Using your personal APS credentials'
+            });
+        }
+        
+        // Fall back to server credentials from .env
+        if (process.env.APS_CLIENT_ID && process.env.APS_CLIENT_SECRET) {
+            console.log('[Active Credentials] Using server default credentials');
+            return res.json({
+                success: true,
+                clientId: process.env.APS_CLIENT_ID,
+                clientSecret: process.env.APS_CLIENT_SECRET,
+                source: 'server',
+                message: 'Using server default credentials (shared). You can save your own credentials to use a personal APS app.'
+            });
+        }
+        
+        // No credentials available
+        console.log('[Active Credentials] No credentials available');
+        return res.json({
+            success: false,
+            clientId: '',
+            clientSecret: '',
+            source: 'none',
+            message: 'No APS credentials configured. Please contact your administrator or save your own credentials.'
+        });
+    } catch (error) {
+        console.error('[Active Credentials] Error:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to load credentials', 
+            details: error.message 
+        });
+    }
+});
+
+/**
  * GET /api/auth/user/:userId
  * Get user data by user ID (admin only)
  */
