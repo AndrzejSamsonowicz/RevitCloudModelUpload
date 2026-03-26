@@ -73,19 +73,13 @@ router.get('/login', async (req, res) => {
         const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
         const firebaseUserId = decodedToken.uid;
         
-        // Get user's decrypted APS credentials or fall back to default from .env
-        let credentials = await decryptUserCredentials(firebaseUserId);
+        // Get user's decrypted APS credentials (required - no fallback)
+        const credentials = await decryptUserCredentials(firebaseUserId);
         
-        if (!credentials) {
-            console.log('No user-specific credentials found, using default APS credentials from .env');
-            credentials = {
-                clientId: process.env.APS_CLIENT_ID,
-                clientSecret: process.env.APS_CLIENT_SECRET
-            };
-        }
-        
-        if (!credentials.clientId || !credentials.clientSecret) {
-            return res.status(400).send('APS credentials not configured. Please set APS_CLIENT_ID and APS_CLIENT_SECRET in .env');
+        if (!credentials || !credentials.clientId || !credentials.clientSecret) {
+            return res.status(400).send(
+                'APS credentials not configured. Please save your APS application Client ID and Client Secret in Settings before logging in with Autodesk.'
+            );
         }
         
         const state = Math.random().toString(36).substring(7);
