@@ -1,4 +1,4 @@
 https://github.com/autodesk-platform-services/aps-design-automation-tools
 https://github.com/Autodesk-Forge/design.automation-python-tutorial
-
+https://aps.autodesk.com/blog/check-version-revit-file-using-design-automation-api
 

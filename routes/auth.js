@@ -222,6 +222,58 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
 });
 
 /**
+ * GET /validate-tokens/:sessionId
+ * Validate if user's Autodesk tokens are still valid
+ */
+router.get('/validate-tokens/:sessionId', async (req, res) => {
+    try {
+        const session = sessions.get(req.params.sessionId);
+        
+        if (!session) {
+            return res.json({ 
+                valid: false, 
+                error: 'Session not found. Please log in again.' 
+            });
+        }
+
+        // Check if session has tokens
+        if (!session.accessToken || !session.refreshToken) {
+            return res.json({ 
+                valid: false, 
+                error: 'Authentication tokens missing. Please log in again.' 
+            });
+        }
+
+        // Try to refresh the token to verify it's still valid
+        const apsClient = require('../services/apsClient');
+        try {
+            const newTokens = await apsClient.refreshToken(session.refreshToken);
+            
+            // Update session with new tokens
+            session.accessToken = newTokens.accessToken;
+            session.refreshToken = newTokens.refreshToken;
+            session.expiresIn = newTokens.expiresIn;
+            session.timestamp = Date.now();
+            sessions.set(req.params.sessionId, session);
+
+            return res.json({ valid: true });
+        } catch (error) {
+            console.error('Token validation failed:', error.message);
+            return res.json({ 
+                valid: false, 
+                error: 'Authentication expired. Please log out and log back in to refresh your credentials.' 
+            });
+        }
+    } catch (error) {
+        console.error('Error validating tokens:', error);
+        res.status(500).json({ 
+            valid: false, 
+            error: 'Failed to validate authentication. Please try again.' 
+        });
+    }
+});
+
+/**
  * Middleware to get user token from session
  */
 router.getUserToken = (sessionId) => {

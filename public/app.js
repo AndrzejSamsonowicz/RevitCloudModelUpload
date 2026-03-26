@@ -2249,9 +2249,73 @@ async function savePublishingSchedules() {
             showMessage('publishMessage', 'You must be logged in to save schedules', 'error');
             return;
         }
+
+        // ===== VALIDATION 1: Check if authentication is still valid =====
+        if (!sessionId) {
+            showMessage('publishMessage', '⚠️ No active session. Please log in again.', 'error');
+            showToast('Authentication Required', 'Please log in to save schedules', 'error');
+            return;
+        }
+
+        console.log('Validating authentication tokens...');
+        const tokenValidation = await fetch(`/oauth/validate-tokens/${sessionId}`);
+        const validationResult = await tokenValidation.json();
+        
+        if (!validationResult.valid) {
+            console.error('Token validation failed:', validationResult.error);
+            showMessage('publishMessage', `🔒 ${validationResult.error}`, 'error');
+            showToast(
+                'Authentication Expired',
+                validationResult.error || 'Please log out and log back in to refresh your credentials.',
+                'error'
+            );
+            return;
+        }
+        console.log('✓ Authentication tokens are valid');
         
         const schedules = getAllPublishingSchedules();
         console.log('Collected schedules:', schedules.length, schedules);
+
+        // ===== VALIDATION 2: Ensure at least one day is selected for each schedule =====
+        const invalidSchedules = [];
+        const hourInputs = document.querySelectorAll('.publish-hour-input');
+        
+        hourInputs.forEach(input => {
+            const fileId = input.dataset.fileId;
+            const fileName = input.closest('tr')?.dataset.fileName || 'Unknown';
+            const weekdayCheckboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${fileId}"]`);
+            const hasCheckedDay = Array.from(weekdayCheckboxes).some(cb => cb.checked);
+            const hour = input.value;
+            const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${fileId}"]`);
+            const minute = minuteInput ? minuteInput.value : null;
+            
+            // If time is set but no day is selected, it's invalid
+            if ((hour || minute) && !hasCheckedDay) {
+                invalidSchedules.push(fileName);
+            }
+        });
+        
+        if (invalidSchedules.length > 0) {
+            const fileList = invalidSchedules.join(', ');
+            showMessage(
+                'publishMessage', 
+                `⚠️ Please select at least one day for: ${fileList}`, 
+                'error'
+            );
+            showToast(
+                'Missing Schedule Days',
+                `Select at least one day (Mon-Sun) for each file with a scheduled time`,
+                'error'
+            );
+            return;
+        }
+
+        if (schedules.length === 0) {
+            showMessage('publishMessage', 'ℹ️ No schedules to save. Set time and select days for files you want to schedule.', 'info');
+            return;
+        }
+        
+        console.log('✓ All schedules have valid days selected');
         
         // Enhance schedules with additional metadata needed for publishing
         const enhancedSchedules = schedules.map(schedule => {
