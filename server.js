@@ -115,7 +115,10 @@ app.use(helmet({
             // upgradeInsecureRequests disabled - VM runs on HTTP without SSL
         }
     },
-    hsts: false // Disabled - VM runs on HTTP without SSL certificates
+    hsts: false, // Disabled - VM runs on HTTP without SSL certificates
+    crossOriginOpenerPolicy: false, // Disabled - requires HTTPS
+    crossOriginResourcePolicy: false, // Disabled - requires HTTPS
+    crossOriginEmbedderPolicy: false // Disabled - requires HTTPS
 }));
 
 // 2. CORS Protection
