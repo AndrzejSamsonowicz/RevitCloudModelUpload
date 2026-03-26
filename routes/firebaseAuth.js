@@ -161,11 +161,11 @@ async function encryptUserCredentials(userId, clientId, clientSecret) {
         encrypted += cipher.final('hex');
         
         // Save to Firestore using new field names
-        await getDb().collection('users').doc(userId).update({
+        await getDb().collection('users').doc(userId).set({
             encryptedCredentials: encrypted,
             credentialsIV: iv.toString('hex'),
             credentialsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
         
         console.log(`Successfully encrypted and saved credentials for user ${userId}`);
         return true;
@@ -631,29 +631,17 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         
-        // Encrypt credentials server-side
-        const crypto = require('crypto');
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
+        // Validate credentials format
+        if (typeof clientId !== 'string' || typeof clientSecret !== 'string') {
+            return res.status(400).json({ error: 'Invalid credential format' });
+        }
         
-        const iv = crypto.randomBytes(16);
-        const cipherClientId = crypto.createCipheriv(algorithm, key, iv);
-        const cipherClientSecret = crypto.createCipheriv(algorithm, key, iv);
+        if (clientId.trim().length < 10 || clientSecret.trim().length < 10) {
+            return res.status(400).json({ error: 'Credentials appear to be too short' });
+        }
         
-        let encryptedClientId = cipherClientId.update(clientId, 'utf8', 'hex');
-        encryptedClientId += cipherClientId.final('hex');
-        
-        let encryptedClientSecret = cipherClientSecret.update(clientSecret, 'utf8', 'hex');
-        encryptedClientSecret += cipherClientSecret.final('hex');
-        
-        console.log(`[Credentials] Saving encrypted credentials to Firestore for user: ${req.userId}`);
-        
-        await getDb().collection('users').doc(req.userId).set({
-            encryptedClientId,
-            encryptedClientSecret,
-            encryptionIV: iv.toString('hex'),
-            credentialsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        // Use the encryption helper function to encrypt and store
+        await encryptUserCredentials(req.userId, clientId.trim(), clientSecret.trim());
         
         console.log(`[Credentials] Successfully saved credentials for user: ${req.userId}`);
         
@@ -671,7 +659,6 @@ router.put('/user/credentials', verifyFirebaseToken, async (req, res) => {
 router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
     console.log('[Credentials GET] Route handler called!');
     console.log('[Credentials GET] req.userId:', req.userId);
-    console.log('[Credentials GET] req.user:', req.user);
     
     try {
         console.log(`[Credentials] Loading credentials for user: ${req.userId}`);
@@ -679,18 +666,7 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
         const userDoc = await getDb().collection('users').doc(req.userId).get();
         
         if (!userDoc.exists) {
-            console.log(`[Credentials] User not found: ${req.userId}`);
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const userData = userDoc.data();
-        console.log(`[Credentials] User data keys:`, Object.keys(userData));
-        console.log(`[Credentials] Has encryptedClientId: ${!!userData.encryptedClientId}`);
-        console.log(`[Credentials] Has encryptedClientSecret: ${!!userData.encryptedClientSecret}`);
-        console.log(`[Credentials] Has encryptionIV: ${!!userData.encryptionIV}`);
-        
-        if (!userData.encryptedClientId || !userData.encryptedClientSecret) {
-            console.log('[Credentials] No credentials stored yet');
+            console.log(`[Credentials] User document not found - returning empty credentials`);
             return res.json({
                 success: true,
                 credentials: {
@@ -700,43 +676,48 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
             });
         }
         
-        // Decrypt credentials server-side
-        const crypto = require('crypto');
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(process.env.ENCRYPTION_KEY || 'default-encryption-key-change-in-production-32bytes', 'utf8').slice(0, 32);
-        const iv = Buffer.from(userData.encryptionIV, 'hex');
+        const userData = userDoc.data();
         
-        console.log('[Credentials] Decrypting credentials...');
+        // Try to decrypt using the decryptUserCredentials helper function
+        try {
+            const credentials = await decryptUserCredentials(req.userId);
+            
+            if (credentials && credentials.clientId && credentials.clientSecret) {
+                console.log(`[Credentials] Successfully decrypted credentials`);
+                return res.json({
+                    success: true,
+                    credentials: {
+                        clientId: credentials.clientId,
+                        clientSecret: credentials.clientSecret
+                    }
+                });
+            }
+        } catch (decryptError) {
+            console.warn('[Credentials] Decryption failed (old/corrupted credentials):', decryptError.message);
+            console.log('[Credentials] Returning empty credentials - user will need to re-enter them');
+        }
         
-        const decipherClientId = crypto.createDecipheriv(algorithm, key, iv);
-        const decipherClientSecret = crypto.createDecipheriv(algorithm, key, iv);
-        
-        let clientId = decipherClientId.update(userData.encryptedClientId, 'hex', 'utf8');
-        clientId += decipherClientId.final('utf8');
-        
-        let clientSecret = decipherClientSecret.update(userData.encryptedClientSecret, 'hex', 'utf8');
-        clientSecret += decipherClientSecret.final('utf8');
-        
-        console.log(`[Credentials] Decrypted clientId length: ${clientId.length}`);
-        console.log(`[Credentials] Decrypted clientSecret length: ${clientSecret.length}`);
-        
-        res.json({
+        // No credentials or decryption failed - return empty
+        return res.json({
             success: true,
             credentials: {
-                clientId,
-                clientSecret
+                clientId: '',
+                clientSecret: ''
             }
         });
     } catch (error) {
         console.error('[Credentials] Get credentials error:', error);
-        res.status(500).json({ error: 'Failed to retrieve credentials', details: error.message });
+        // Even on error, return empty credentials so modal can open
+        return res.json({
+            success: true,
+            credentials: {
+                clientId: '',
+                clientSecret: ''
+            }
+        });
     }
 });
 
-/**
- * GET /api/auth/user/active-credentials
- * Get active APS credentials (user's personal or server defaults with fallback indicator)
- */
 /**
  * GET /api/auth/user/:userId
  * Get user data by user ID (admin only)
