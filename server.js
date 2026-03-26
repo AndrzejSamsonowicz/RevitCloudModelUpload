@@ -111,8 +111,8 @@ app.use(helmet({
             ],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
             objectSrc: ["'none'"],
-            frameSrc: ["https://www.youtube.com"] // For video modals
-            // upgradeInsecureRequests disabled - VM runs on HTTP without SSL
+            frameSrc: ["https://www.youtube.com"], // For video modals
+            upgradeInsecureRequests: null // MUST be null (not false) to disable - VM runs on HTTP without SSL
         }
     },
     hsts: false, // Disabled - VM runs on HTTP without SSL certificates
