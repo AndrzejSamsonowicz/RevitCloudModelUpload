@@ -101,6 +101,7 @@ app.use(helmet({
             imgSrc: ["'self'", "data:", "https:"],
             connectSrc: [
                 "'self'", 
+                "https://www.gstatic.com", // Firebase source maps
                 "https://developer.api.autodesk.com",
                 "https://firebasestorage.googleapis.com",
                 "https://firestore.googleapis.com",
