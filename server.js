@@ -112,22 +112,22 @@ app.use(helmet({
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
             objectSrc: ["'none'"],
             frameSrc: ["https://www.youtube.com"], // For video modals
-            upgradeInsecureRequests: null // MUST be null (not false) to disable - VM runs on HTTP without SSL
+            upgradeInsecureRequests: [] // Upgrade HTTP requests to HTTPS
         }
     },
-    hsts: false, // Disabled - VM runs on HTTP without SSL certificates
-    crossOriginOpenerPolicy: false, // Disabled - requires HTTPS
-    crossOriginResourcePolicy: false, // Disabled - requires HTTPS
-    crossOriginEmbedderPolicy: false // Disabled - requires HTTPS
+    hsts: {
+        maxAge: 31536000, // 1 year in seconds
+        includeSubDomains: true,
+        preload: true
+    }
 }));
 
 // 2. CORS Protection
 const allowedOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'http://34.65.169.15:3000', // VM IP address
-    'http://rvtpub.digibuild.ch:3000', // Custom domain with port
-    'http://rvtpub.digibuild.ch', // Custom domain (via Nginx on port 80)
+    'https://rvtpub.digibuild.ch', // Custom domain with HTTPS (production)
+    'http://rvtpub.digibuild.ch', // Custom domain HTTP (redirects to HTTPS)
     process.env.FRONTEND_URL,
     process.env.PRODUCTION_URL
 ].filter(Boolean); // Remove undefined values
