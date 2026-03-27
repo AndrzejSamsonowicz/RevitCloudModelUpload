@@ -255,7 +255,7 @@ app.use((err, req, res, next) => {
     const errorResponse = { error: message };
     
     // Only include stack trace in local development
-    if (process.env.NODE_ENV === 'development' && req.ip === '::1' || req.ip === '127.0.0.1') {
+    if (process.env.NODE_ENV === 'development' && (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip === '::ffff:127.0.0.1')) {
         errorResponse.stack = err.stack;
     }
     

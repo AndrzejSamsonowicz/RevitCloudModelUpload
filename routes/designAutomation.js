@@ -360,6 +360,23 @@ router.post('/workitem/create', async (req, res, next) => {
             revitVersion || '2026'
         );
 
+        // Store metadata for webhook to call PublishModel when WorkItem succeeds
+        const webhookRoutes = require('./webhooks');
+        const projectIdForPublish = `b.${projectGuid}`;
+        
+        // Construct lineage URN from modelGuid (format: urn:adsk.wipXXX:dm.lineage:<guid>)
+        const regionPrefix = region === 'EMEA' ? 'wipemea' : (region === 'US' ? 'wipproduswest2' : 'wip');
+        const lineageId = `urn:adsk.${regionPrefix}:dm.lineage:${modelGuid}`;
+        
+        webhookRoutes.storeWorkitemMetadata(result.workItemId, {
+            shouldPublish: true,
+            projectId: projectIdForPublish,
+            itemId: lineageId,
+            userToken: userToken
+        });
+        
+        console.log(`✓ Stored metadata for WorkItem ${result.workItemId} to trigger PublishModel on completion`);
+
         res.json({ 
             success: true, 
             data: result,
@@ -579,63 +596,18 @@ router.post('/scheduled-publish', async (req, res, next) => {
             console.log(`✓ WorkItem ${result.workItemId} added to poller`);
         }
         
-        // Trigger PublishModel to make the model viewable
-        // Use the projectId from schedule (already in b.xxx format)
+        // Store metadata for webhook to call PublishModel when WorkItem succeeds
+        const webhookRoutes = require('./webhooks');
         const projectIdForPublish = projectId || `b.${projectGuid}`;
         
-        try {
-            console.log(`Triggering PublishModel for ${fileName}...`);
-            
-            // Get the lineage ID from the file version
-            const axios = require('axios');
-            const versionResponse = await axios.get(
-                `https://developer.api.autodesk.com/data/v1/projects/${projectIdForPublish}/versions/${encodeURIComponent(fileId)}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${userToken}`
-                    }
-                }
-            );
-            
-            const lineageId = versionResponse.data.data.relationships?.item?.data?.id;
-            
-            if (lineageId) {
-                // Create PublishModel command
-                const publishPayload = {
-                    jsonapi: { version: '1.0' },
-                    data: {
-                        type: 'commands',
-                        attributes: {
-                            extension: {
-                                type: 'commands:autodesk.bim360:C4RModelPublish',
-                                version: '1.0.0'
-                            }
-                        },
-                        relationships: {
-                            resources: {
-                                data: [{ type: 'items', id: lineageId }]
-                            }
-                        }
-                    }
-                };
-                
-                const publishResponse = await axios.post(
-                    `https://developer.api.autodesk.com/data/v1/projects/${projectIdForPublish}/commands`,
-                    publishPayload,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${userToken}`,
-                            'Content-Type': 'application/vnd.api+json'
-                        }
-                    }
-                );
-                
-                console.log(`✓ PublishModel triggered: ${publishResponse.data.data.id}`);
-            }
-        } catch (publishError) {
-            console.error('PublishModel failed (non-fatal):', publishError.response?.data || publishError.message);
-            // Don't fail the whole request if PublishModel fails
-        }
+        webhookRoutes.storeWorkitemMetadata(result.workItemId, {
+            shouldPublish: true,
+            projectId: projectIdForPublish,
+            itemId: fileId,
+            userToken: userToken
+        });
+        
+        console.log(`✓ Stored metadata for WorkItem ${result.workItemId} to trigger PublishModel on completion`);
         
         res.json({ 
             success: true, 

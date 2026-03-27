@@ -416,6 +416,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     initializeEventListeners();
     
     const params = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     
     // Check Firebase authentication first
     if (typeof firebase !== 'undefined' && firebase.auth()) {
@@ -426,7 +427,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 userId = user.uid;
                 
                 // Check for Autodesk OAuth session
-                sessionId = params.get('session');
+                sessionId = hashParams.get('session') || params.get('session');
                 if (!sessionId) {
                     sessionId = sessionStorage.getItem('aps_session');
                 }

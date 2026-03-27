@@ -168,8 +168,8 @@ router.get('/callback', async (req, res) => {
             // Continue even if Firestore storage fails
         }
 
-        // Redirect to frontend with session ID
-        res.redirect(`/?session=${sessionId}&success=true`);
+        // Redirect using URL fragment so session ID is not sent in HTTP requests
+        res.redirect(`/#session=${encodeURIComponent(sessionId)}&success=true`);
     } catch (error) {
         console.error('OAuth callback error:', error);
         res.redirect('/?error=auth_failed&message=' + encodeURIComponent(error.message));
