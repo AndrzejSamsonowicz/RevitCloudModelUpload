@@ -48,10 +48,11 @@ console.log('✓ Session cleanup scheduler initialized');
 
 /**
  * Initiate 3-legged OAuth flow with user-specific credentials
+ * SECURITY: Uses POST request to avoid exposing Firebase token in URL
  */
-router.get('/login', async (req, res) => {
+router.post('/login', async (req, res) => {
     try {
-        const { firebaseToken } = req.query;
+        const { firebaseToken } = req.body;
         
         if (!firebaseToken) {
             return res.status(400).send('Firebase authentication required');
@@ -91,7 +92,9 @@ router.get('/login', async (req, res) => {
         
         // Get authorization URL with user-specific credentials
         const authUrl = apsClient.getAuthorizationUrlForUser(state, credentials.clientId, credentials.clientSecret);
-        res.redirect(authUrl);
+        
+        // Return redirect URL as JSON instead of redirecting directly
+        res.json({ redirectUrl: authUrl });
     } catch (error) {
         console.error('OAuth login error:', error);
         res.status(500).send('Failed to initiate OAuth flow: ' + error.message);

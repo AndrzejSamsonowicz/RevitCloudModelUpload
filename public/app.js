@@ -485,7 +485,25 @@ async function login() {
         }
         
         const token = await user.getIdToken();
-        window.location.href = `/oauth/login?firebaseToken=${token}`;
+        
+        // Use secure POST request instead of exposing token in URL
+        const response = await fetch('/oauth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ firebaseToken: token })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.redirectUrl) {
+                window.location.href = data.redirectUrl;
+            }
+        } else {
+            const error = await response.text();
+            alert('Failed to initiate Autodesk login: ' + error);
+        }
     } catch (error) {
         console.error('Login error:', error);
         alert('Failed to initiate Autodesk login');
