@@ -204,31 +204,11 @@ async function triggerPublishModel(workitemId, metadata) {
 
         console.log(`[PublishModel] ✓ PublishModel command initiated: ${publishResponse.data.data?.id}`);
         console.log(`[PublishModel] Command status: ${publishResponse.data.data?.attributes?.status}`);
-
-        // Poll for publish completion (optional but recommended)
-        let retryCount = 3;
-        while (retryCount-- > 0) {
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-            
-            try {
-                const statusResponse = await axios.get(
-                    `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/commands/${publishResponse.data.data.id}`,
-                    { headers: { 'Authorization': `Bearer ${metadata.userToken}` } }
-                );
-                
-                const cmdStatus = statusResponse.data.data?.attributes?.status;
-                console.log(`[PublishModel] Publish status check ${3 - retryCount}/3: ${cmdStatus}`);
-                
-                if (cmdStatus === 'complete') {
-                    console.log('[PublishModel] ✓✓✓ PublishModel completed successfully - new version created!');
-                    break;
-                } else if (cmdStatus === 'failed') {
-                    console.error('[PublishModel] ✗ PublishModel command failed');
-                    break;
-                }
-            } catch (pollErr) {
-                console.error('[PublishModel] Error polling publish status:', pollErr.message);
-            }
+        
+        // "committed" status means the publish command was accepted and will be processed
+        // No need to poll - the publish happens asynchronously in ACC
+        if (publishResponse.data.data?.attributes?.status === 'committed') {
+            console.log('[PublishModel] ✓✓✓ PublishModel command committed - new version will be created in ACC');
         }
 
         // Clean up metadata

@@ -75,6 +75,12 @@ class WorkItemPoller {
 
         for (const workItemId of workItemIds) {
             const info = this.activeWorkItems.get(workItemId);
+            
+            // Skip if already removed by another process
+            if (!info) {
+                continue;
+            }
+            
             const age = now - info.startTime;
 
             // Stop tracking if too old
@@ -91,9 +97,8 @@ class WorkItemPoller {
                 console.log(`[WorkItemPoller] WorkItem ${workItemId}: ${status.status}`);
 
                 if (status.status === 'success' || status.status === 'failed' || status.status === 'cancelled') {
-                    // WorkItem completed - update Firestore and stop tracking
+                    // WorkItem completed - update Firestore and stop tracking (deletion happens in onWorkItemComplete)
                     await this.onWorkItemComplete(workItemId, info, status);
-                    this.activeWorkItems.delete(workItemId);
                 }
             } catch (error) {
                 console.error(`[WorkItemPoller] Error polling WorkItem ${workItemId}:`, error.message);
@@ -130,6 +135,9 @@ class WorkItemPoller {
         }
 
         await this.updateFirestore(workItemId, info.logId, finalStatus, finalMessage, status.reportUrl);
+        
+        // Remove from active tracking immediately to prevent re-processing
+        this.activeWorkItems.delete(workItemId);
         
         // Trigger PublishModel if WorkItem succeeded
         if (status.status === 'success') {
