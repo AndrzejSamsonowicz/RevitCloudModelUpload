@@ -41,6 +41,7 @@ const dataManagementRoutes = require('./routes/dataManagement');
 const { router: firebaseAuthRoutes } = require('./routes/firebaseAuth');
 const licenseRoutes = require('./routes/licenses');
 const adminToolsRoutes = require('./routes/adminTools');
+const encryptionRoutes = require('./routes/encryption');
 
 // Initialize Firebase Admin SDK
 try {
@@ -208,6 +209,7 @@ app.use('/api/auth', authLimiter, firebaseAuthRoutes);
 app.use('/api/design-automation', apiLimiter, designAutomationRoutes);
 app.use('/api/data-management', apiLimiter, dataManagementRoutes);
 app.use('/api/admin', apiLimiter, adminToolsRoutes);
+app.use('/api/encryption', apiLimiter, encryptionRoutes);
 app.use('/api', apiLimiter, licenseRoutes);
 app.use('/webhooks', webhookRoutes); // No rate limit on webhooks
 app.use('/api/workitem-status', apiLimiter, workitemStatusRoutes);

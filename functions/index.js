@@ -5,6 +5,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
+const { decryptSchedules } = require('./encryption');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -44,8 +45,13 @@ exports.checkScheduledPublishing = functions.region('europe-west6').pubsub
         
         console.log(`Checking schedules for user: ${userId}`);
         
+        // Decrypt schedules (fileName, projectName are encrypted)
+        const encryptedSchedules = userData.publishingSchedules;
+        const schedules = decryptSchedules(encryptedSchedules);
+        console.log(`✓ Decrypted ${schedules.length} schedules for user ${userId}`);
+        
         // Check each schedule
-        for (const schedule of userData.publishingSchedules) {
+        for (const schedule of schedules) {
           if (shouldPublishNow(schedule, now)) {
             console.log(`Triggering publish for file: ${schedule.fileName} (${schedule.fileId})`);
             

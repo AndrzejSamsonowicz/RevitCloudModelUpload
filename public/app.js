@@ -2612,11 +2612,35 @@ async function savePublishingSchedules() {
         });
         
         console.log('Saving to Firestore, userId:', userId);
-        console.log('Enhanced schedules:', enhancedSchedules);
+        console.log('Enhanced schedules (before encryption):', enhancedSchedules);
+        
+        // Encrypt sensitive fields (fileName, projectName) before saving
+        let encryptedSchedules;
+        try {
+            const encryptResponse = await fetch('/api/encryption/encrypt-schedules', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ schedules: enhancedSchedules })
+            });
+            
+            if (!encryptResponse.ok) {
+                throw new Error('Failed to encrypt schedules');
+            }
+            
+            const encryptData = await encryptResponse.json();
+            encryptedSchedules = encryptData.schedules;
+            console.log('✓ Schedules encrypted successfully');
+        } catch (encryptError) {
+            console.error('Encryption error:', encryptError);
+            showMessage('publishMessage', `⚠️ Warning: Failed to encrypt data. Saving without encryption.`, 'warning');
+            encryptedSchedules = enhancedSchedules; // Fallback to unencrypted
+        }
         
         const db = firebase.firestore();
         await db.collection('users').doc(userId).set({
-            publishingSchedules: enhancedSchedules,
+            publishingSchedules: encryptedSchedules,
             schedulesUpdated: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         
@@ -2666,14 +2690,40 @@ async function loadPublishingSchedules() {
         }
         
         const userData = userDoc.data();
-        const schedules = userData.publishingSchedules || [];
+        const encryptedSchedules = userData.publishingSchedules || [];
         
-        console.log(`Loaded schedules from Firestore for user ${userId}:`, schedules);
+        console.log(`Loaded encrypted schedules from Firestore for user ${userId}:`, encryptedSchedules);
         
-        if (schedules.length === 0) {
+        if (encryptedSchedules.length === 0) {
             console.log('No schedules found in Firestore');
             return;
         }
+        
+        // Decrypt sensitive fields (fileName, projectName) after loading
+        let schedules;
+        try {
+            const decryptResponse = await fetch('/api/encryption/decrypt-schedules', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ schedules: encryptedSchedules })
+            });
+            
+            if (!decryptResponse.ok) {
+                throw new Error('Failed to decrypt schedules');
+            }
+            
+            const decryptData = await decryptResponse.json();
+            schedules = decryptData.schedules;
+            console.log('✓ Schedules decrypted successfully');
+        } catch (decryptError) {
+            console.error('Decryption error:', decryptError);
+            console.warn('⚠️ Using encrypted/raw data (might be legacy unencrypted data)');
+            schedules = encryptedSchedules; // Fallback to raw data
+        }
+        
+        console.log('Decrypted schedules:', schedules);
         
         // Apply schedules to the UI
         let appliedCount = 0;
