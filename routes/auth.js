@@ -118,6 +118,10 @@ router.get('/callback', async (req, res) => {
     }
 
     try {
+        console.log('[OAuth Callback] Has sessionState.credentials:', !!sessionState.credentials);
+        console.log('[OAuth Callback] Has sessionState.credentials.clientId:', !!sessionState.credentials?.clientId);
+        console.log('[OAuth Callback] Has sessionState.credentials.clientSecret:', !!sessionState.credentials?.clientSecret);
+        
         // Exchange code for token using user-specific credentials
         const tokenData = await apsClient.get3LeggedTokenForUser(code, sessionState.credentials.clientId, sessionState.credentials.clientSecret);
         
@@ -134,6 +138,9 @@ router.get('/callback', async (req, res) => {
         
         // Store token in session (in production, use secure session storage)
         const sessionId = Math.random().toString(36).substring(7);
+        console.log(`[OAuth Callback] Creating new session: ${sessionId}`);
+        console.log(`[OAuth Callback] Storing credentials in session: ${!!sessionState.credentials}`);
+        
         sessions.set(sessionId, {
             ...tokenData,
             userId: userProfile.userId,
@@ -142,6 +149,10 @@ router.get('/callback', async (req, res) => {
             credentials: sessionState.credentials,
             timestamp: Date.now()
         });
+        
+        console.log(`[OAuth Callback] Session saved. Verifying storage...`);
+        const savedSession = sessions.get(sessionId);
+        console.log(`[OAuth Callback] Saved session has credentials: ${!!savedSession?.credentials}`);
         
         // Also store token in Firestore for scheduled publishing
         // Use Firebase userId for the Firestore document
@@ -270,15 +281,26 @@ router.get('/validate-tokens/:sessionId', async (req, res) => {
     try {
         const session = sessions.get(req.params.sessionId);
         
+        console.log(`[Token Validation] SessionId: ${req.params.sessionId}`);
+        console.log(`[Token Validation] Session exists: ${!!session}`);
+        
         if (!session) {
+            console.log('[Token Validation] Session not found');
             return res.json({ 
                 valid: false, 
                 error: 'Session not found. Please log in again.' 
             });
         }
 
+        console.log(`[Token Validation] Has accessToken: ${!!session.accessToken}`);
+        console.log(`[Token Validation] Has refreshToken: ${!!session.refreshToken}`);
+        console.log(`[Token Validation] Has credentials: ${!!session.credentials}`);
+        console.log(`[Token Validation] Has credentials.clientId: ${!!session.credentials?.clientId}`);
+        console.log(`[Token Validation] Has credentials.clientSecret: ${!!session.credentials?.clientSecret}`);
+
         // Check if session has tokens
         if (!session.accessToken || !session.refreshToken) {
+            console.log('[Token Validation] Tokens missing from session');
             return res.json({ 
                 valid: false, 
                 error: 'Authentication tokens missing. Please log in again.' 
@@ -287,6 +309,7 @@ router.get('/validate-tokens/:sessionId', async (req, res) => {
 
         // Check if session has user credentials
         if (!session.credentials || !session.credentials.clientId || !session.credentials.clientSecret) {
+            console.log('[Token Validation] User credentials missing from session');
             return res.json({ 
                 valid: false, 
                 error: 'User credentials missing. Please log in again.' 
