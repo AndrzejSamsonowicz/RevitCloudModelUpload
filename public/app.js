@@ -2874,7 +2874,6 @@ async function clearScheduleForFile(fileId, modelGuid, fileName) {
         
         // Remove from Firestore
         if (typeof firebase === 'undefined' || !userId) {
-            alert('Cannot save changes - not logged in');
             return;
         }
         
@@ -2882,7 +2881,6 @@ async function clearScheduleForFile(fileId, modelGuid, fileName) {
         const userDoc = await db.collection('users').doc(userId).get();
         
         if (!userDoc.exists) {
-            alert('User data not found');
             return;
         }
         
@@ -2911,7 +2909,7 @@ async function clearScheduleForFile(fileId, modelGuid, fileName) {
         const filteredSchedules = schedules.filter(s => s.modelGuid !== modelGuid);
         
         if (filteredSchedules.length === schedules.length) {
-            alert('No schedule found for this file');
+            // No schedule found for this file
             return;
         }
         
@@ -2940,11 +2938,8 @@ async function clearScheduleForFile(fileId, modelGuid, fileName) {
             schedulesUpdated: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        alert(`Schedule cleared for "${fileName}"`);
-        
     } catch (error) {
         console.error('Error clearing schedule:', error);
-        alert('Failed to clear schedule');
     }
 }
 
