@@ -101,99 +101,8 @@ router.post('/design-automation', express.json(), async (req, res) => {
 
     // If WorkItem succeeded and we have metadata for publishing, call PublishModel API
     if (status === 'success') {
-        const metadata = workitemMetadata.get(id);
-        
-        if (metadata && metadata.shouldPublish) {
-            console.log(`[Webhook] WorkItem succeeded - calling PublishModel API for file ${metadata.itemId}`);
-            
-            try {
-                // Extract lineage ID from itemId if needed
-                let lineageId = metadata.itemId;
-                if (metadata.itemId.includes('fs.file')) {
-                    console.log('[Webhook] Item is a version, fetching lineage ID...');
-                    const versionResponse = await axios.get(
-                        `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/versions/${encodeURIComponent(metadata.itemId)}`,
-                        { headers: { 'Authorization': `Bearer ${metadata.userToken}` } }
-                    );
-                    const itemLink = versionResponse.data.data.relationships?.item?.data?.id;
-                    if (itemLink) {
-                        lineageId = itemLink;
-                        console.log(`[Webhook] Lineage ID: ${lineageId}`);
-                    }
-                }
-
-                // Prepare PublishModel command payload
-                const payload = {
-                    jsonapi: { version: '1.0' },
-                    data: {
-                        type: 'commands',
-                        attributes: {
-                            extension: {
-                                type: 'commands:autodesk.bim360:PublishWithoutCommentModel',
-                                version: '1.0.0'
-                            }
-                        },
-                        relationships: {
-                            resources: {
-                                data: [{ type: 'items', id: lineageId }]
-                            }
-                        }
-                    }
-                };
-
-                console.log('[Webhook] Calling PublishModel API...');
-                const publishResponse = await axios.post(
-                    `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/commands`,
-                    payload,
-                    { 
-                        headers: { 
-                            'Authorization': `Bearer ${metadata.userToken}`,
-                            'Content-Type': 'application/vnd.api+json'
-                        } 
-                    }
-                );
-
-                console.log(`[Webhook] ✓ PublishModel command initiated: ${publishResponse.data.data?.id}`);
-                console.log(`[Webhook] Command status: ${publishResponse.data.data?.attributes?.status}`);
-
-                // Poll for publish completion (optional but recommended)
-                let retryCount = 3;
-                while (retryCount-- > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-                    
-                    try {
-                        const statusResponse = await axios.get(
-                            `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/commands/${publishResponse.data.data.id}`,
-                            { headers: { 'Authorization': `Bearer ${metadata.userToken}` } }
-                        );
-                        
-                        const cmdStatus = statusResponse.data.data?.attributes?.status;
-                        console.log(`[Webhook] Publish status check ${3 - retryCount}/3: ${cmdStatus}`);
-                        
-                        if (cmdStatus === 'complete') {
-                            console.log('[Webhook] ✓✓✓ PublishModel completed successfully - new version created!');
-                            break;
-                        } else if (cmdStatus === 'failed') {
-                            console.error('[Webhook] ✗ PublishModel command failed');
-                            break;
-                        }
-                    } catch (pollErr) {
-                        console.error('[Webhook] Error polling publish status:', pollErr.message);
-                    }
-                }
-
-                // Clean up metadata
-                workitemMetadata.delete(id);
-                
-            } catch (err) {
-                console.error('[Webhook] ✗ Failed to publish model:', err.response?.data || err.message);
-                if (err.response) {
-                    console.error('[Webhook] Error details:', JSON.stringify(err.response.data, null, 2));
-                }
-            }
-        } else {
-            console.log('[Webhook] No publish metadata found for this WorkItem');
-        }
+        const metadata = getWorkitemMetadata(id);
+        await triggerPublishModel(id, metadata);
     }
 });
 
@@ -218,5 +127,123 @@ router.put('/design-automation/result.txt', express.text({ type: '*/*' }), (req,
     res.status(200).send('OK');
 });
 
+/**
+ * Get workitem metadata
+ */
+function getWorkitemMetadata(workitemId) {
+    return workitemMetadata.get(workitemId);
+}
+
+/**
+ * Delete workitem metadata
+ */
+function deleteWorkitemMetadata(workitemId) {
+    workitemMetadata.delete(workitemId);
+}
+
+/**
+ * Trigger PublishModel for a completed WorkItem
+ * Can be called by webhook or poller
+ */
+async function triggerPublishModel(workitemId, metadata) {
+    if (!metadata || !metadata.shouldPublish) {
+        console.log(`[PublishModel] No publish metadata found for WorkItem ${workitemId}`);
+        return false;
+    }
+
+    console.log(`[PublishModel] WorkItem succeeded - calling PublishModel API for file ${metadata.itemId}`);
+    
+    try {
+        // Extract lineage ID from itemId if needed
+        let lineageId = metadata.itemId;
+        if (metadata.itemId.includes('fs.file')) {
+            console.log('[PublishModel] Item is a version, fetching lineage ID...');
+            const versionResponse = await axios.get(
+                `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/versions/${encodeURIComponent(metadata.itemId)}`,
+                { headers: { 'Authorization': `Bearer ${metadata.userToken}` } }
+            );
+            const itemLink = versionResponse.data.relationships?.item?.data?.id;
+            if (itemLink) {
+                lineageId = itemLink;
+                console.log(`[PublishModel] Lineage ID: ${lineageId}`);
+            }
+        }
+
+        // Prepare PublishModel command payload
+        const payload = {
+            jsonapi: { version: '1.0' },
+            data: {
+                type: 'commands',
+                attributes: {
+                    extension: {
+                        type: 'commands:autodesk.bim360:PublishWithoutCommentModel',
+                        version: '1.0.0'
+                    }
+                },
+                relationships: {
+                    resources: {
+                        data: [{ type: 'items', id: lineageId }]
+                    }
+                }
+            }
+        };
+
+        console.log('[PublishModel] Calling PublishModel API...');
+        const publishResponse = await axios.post(
+            `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/commands`,
+            payload,
+            { 
+                headers: { 
+                    'Authorization': `Bearer ${metadata.userToken}`,
+                    'Content-Type': 'application/vnd.api+json'
+                } 
+            }
+        );
+
+        console.log(`[PublishModel] ✓ PublishModel command initiated: ${publishResponse.data.data?.id}`);
+        console.log(`[PublishModel] Command status: ${publishResponse.data.data?.attributes?.status}`);
+
+        // Poll for publish completion (optional but recommended)
+        let retryCount = 3;
+        while (retryCount-- > 0) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            
+            try {
+                const statusResponse = await axios.get(
+                    `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/commands/${publishResponse.data.data.id}`,
+                    { headers: { 'Authorization': `Bearer ${metadata.userToken}` } }
+                );
+                
+                const cmdStatus = statusResponse.data.data?.attributes?.status;
+                console.log(`[PublishModel] Publish status check ${3 - retryCount}/3: ${cmdStatus}`);
+                
+                if (cmdStatus === 'complete') {
+                    console.log('[PublishModel] ✓✓✓ PublishModel completed successfully - new version created!');
+                    break;
+                } else if (cmdStatus === 'failed') {
+                    console.error('[PublishModel] ✗ PublishModel command failed');
+                    break;
+                }
+            } catch (pollErr) {
+                console.error('[PublishModel] Error polling publish status:', pollErr.message);
+            }
+        }
+
+        // Clean up metadata
+        deleteWorkitemMetadata(workitemId);
+        return true;
+        
+    } catch (err) {
+        console.error('[PublishModel] ✗ Failed to publish model:', err.response?.data || err.message);
+        if (err.response) {
+            console.error('[PublishModel] Error details:', JSON.stringify(err.response.data, null, 2));
+        }
+        return false;
+    }
+}
+
 module.exports = router;
 module.exports.storeWorkitemMetadata = storeWorkitemMetadata;
+module.exports.getWorkitemMetadata = getWorkitemMetadata;
+module.exports.deleteWorkitemMetadata = deleteWorkitemMetadata;
+module.exports.triggerPublishModel = triggerPublishModel;

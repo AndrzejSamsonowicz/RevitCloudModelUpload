@@ -5,6 +5,7 @@
 
 const axios = require('axios');
 const admin = require('firebase-admin');
+const { getWorkitemMetadata, triggerPublishModel } = require('../routes/webhooks');
 
 class WorkItemPoller {
     constructor(designAutomationService) {
@@ -129,6 +130,15 @@ class WorkItemPoller {
         }
 
         await this.updateFirestore(workItemId, info.logId, finalStatus, finalMessage, status.reportUrl);
+        
+        // Trigger PublishModel if WorkItem succeeded
+        if (status.status === 'success') {
+            const metadata = getWorkitemMetadata(workItemId);
+            if (metadata) {
+                console.log(`[WorkItemPoller] Triggering PublishModel for WorkItem ${workItemId}`);
+                await triggerPublishModel(workItemId, metadata);
+            }
+        }
     }
 
     /**
