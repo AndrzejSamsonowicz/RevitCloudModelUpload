@@ -2857,10 +2857,6 @@ async function loadPublishingSchedules() {
  */
 async function clearScheduleForFile(fileId, modelGuid, fileName) {
     try {
-        if (!confirm(`Clear publishing schedule for "${fileName}"?`)) {
-            return;
-        }
-        
         // Clear UI inputs
         const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${fileId}"]`);
         const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${fileId}"]`);
