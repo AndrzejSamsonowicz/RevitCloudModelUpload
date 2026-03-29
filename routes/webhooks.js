@@ -176,7 +176,7 @@ async function triggerPublishModel(workitemId, metadata) {
                 type: 'commands',
                 attributes: {
                     extension: {
-                        type: 'commands:autodesk.bim360:PublishWithoutCommentModel',
+                        type: 'commands:autodesk.bim360:C4RModelPublish',
                         version: '1.0.0'
                     }
                 },
