@@ -108,12 +108,12 @@ if (-not $SkipEncryptionKey) {
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  Deployment Checklist" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "[ ] Code pushed to GitHub" -ForegroundColor Gray
-Write-Host "[ ] SSH to VM and pull latest code" -ForegroundColor Gray
-Write-Host "[ ] PM2 restarted" -ForegroundColor Gray
-Write-Host "[ ] Encryption key configured (if needed)" -ForegroundColor Gray
-Write-Host "[ ] Cloud Functions updated (if needed)" -ForegroundColor Gray
-Write-Host "[ ] Test at: https://$VM_DOMAIN" -ForegroundColor Gray
+Write-Host "- Code pushed to GitHub" -ForegroundColor Gray
+Write-Host "- SSH to VM and pull latest code" -ForegroundColor Gray
+Write-Host "- PM2 restarted" -ForegroundColor Gray
+Write-Host "- Encryption key configured (if needed)" -ForegroundColor Gray
+Write-Host "- Cloud Functions updated (if needed)" -ForegroundColor Gray
+Write-Host "- Test at: https://$VM_DOMAIN" -ForegroundColor Gray
 Write-Host ""
 Write-Host "✓ Ready to Deploy!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
