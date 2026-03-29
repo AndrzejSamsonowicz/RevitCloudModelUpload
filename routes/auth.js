@@ -280,10 +280,22 @@ router.get('/validate-tokens/:sessionId', async (req, res) => {
             });
         }
 
-        // Try to refresh the token to verify it's still valid
+        // Check if session has user credentials
+        if (!session.credentials || !session.credentials.clientId || !session.credentials.clientSecret) {
+            return res.json({ 
+                valid: false, 
+                error: 'User credentials missing. Please log in again.' 
+            });
+        }
+
+        // Try to refresh the token to verify it's still valid using user-specific credentials
         const apsClient = require('../services/apsClient');
         try {
-            const newTokens = await apsClient.refreshToken(session.refreshToken);
+            const newTokens = await apsClient.refreshTokenForUser(
+                session.refreshToken,
+                session.credentials.clientId,
+                session.credentials.clientSecret
+            );
             
             // Update session with new tokens
             session.accessToken = newTokens.accessToken;

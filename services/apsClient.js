@@ -195,6 +195,35 @@ class APSClient {
     }
 
     /**
+     * Refresh 3-legged token with user-specific credentials
+     */
+    async refreshTokenForUser(refreshToken, clientId, clientSecret) {
+        try {
+            const response = await axios.post(
+                `${APS_BASE_URL}/authentication/v2/token`,
+                new URLSearchParams({
+                    grant_type: 'refresh_token',
+                    refresh_token: refreshToken,
+                    client_id: clientId,
+                    client_secret: clientSecret
+                }),
+                {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                }
+            );
+
+            return {
+                accessToken: response.data.access_token,
+                refreshToken: response.data.refresh_token,
+                expiresIn: response.data.expires_in
+            };
+        } catch (error) {
+            console.error('Failed to refresh token (user):', error.response?.data || error.message);
+            throw new Error('Token refresh failed: ' + (error.response?.data?.error || error.message));
+        }
+    }
+
+    /**
      * Get user profile information using 3-legged token
      */
     async getUserProfile(accessToken) {
