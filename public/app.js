@@ -2743,33 +2743,43 @@ async function loadPublishingSchedules() {
             // If not found by exact match, find ALL files by fileName (all versions)
             if (matchingFileIds.length === 0 && schedule.fileName) {
                 console.log(`  Exact fileId not found, searching all versions of: ${schedule.fileName}`);
+                console.log(`  Looking for modelGuid: ${schedule.modelGuid}`);
                 
                 const allRows = document.querySelectorAll('#rvtFilesList tbody tr');
+                console.log(`  Found ${allRows.length} total rows in table`);
+                
                 for (const row of allRows) {
-                    const nameCell = row.querySelector('td:nth-child(2)');
+                    const rowFileName = row.dataset.fileName;
                     const rowModelGuid = row.dataset.modelGuid;
+                    const rowFileId = row.dataset.fileId;
                     
-                    // Match by name AND modelGuid to avoid matching files with same name in different locations
-                    if (nameCell && nameCell.textContent.startsWith(schedule.fileName + ' ') && 
-                        rowModelGuid === schedule.modelGuid) {
-                        const matchedFileId = row.dataset.fileId;
-                        matchingFileIds.push(matchedFileId);
-                        console.log(`  Found matching file version with fileId: ${matchedFileId}`);
+                    console.log(`  Checking row: fileName="${rowFileName}", modelGuid="${rowModelGuid}"`);
+                    
+                    // Match by fileName AND modelGuid
+                    if (rowFileName === schedule.fileName && rowModelGuid === schedule.modelGuid) {
+                        matchingFileIds.push(rowFileId);
+                        console.log(`  ✓ Found matching file! fileId: ${rowFileId}`);
                     }
                 }
+                
+                console.log(`  Total matches found: ${matchingFileIds.length}`);
             }
             
             // Apply schedule to all matching files
             matchingFileIds.forEach(fileId => {
+                console.log(`  Applying schedule to fileId: ${fileId}`);
+                
                 const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${fileId}"]`);
                 const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${fileId}"]`);
                 const checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${fileId}"]`);
+                
+                console.log(`  Found hourInput: ${!!hourInput}, minuteInput: ${!!minuteInput}, checkboxes: ${checkboxes.length}`);
                 
                 if (hourInput && minuteInput && schedule.time) {
                     const [hour, minute] = schedule.time.split(':');
                     hourInput.value = hour;
                     minuteInput.value = minute;
-                    console.log(`  Set time to ${hour}:${minute} for fileId: ${fileId}`);
+                    console.log(`  ✓ Set time to ${hour}:${minute} for fileId: ${fileId}`);
                 }
                 
                 if (checkboxes && schedule.days) {
@@ -2777,11 +2787,15 @@ async function loadPublishingSchedules() {
                         const day = parseInt(cb.dataset.day);
                         const shouldCheck = schedule.days.includes(day);
                         cb.checked = shouldCheck;
+                        console.log(`    Day ${day}: ${shouldCheck ? 'checked' : 'unchecked'}`);
                     });
                     appliedCount++;
+                    console.log(`  ✓ Applied schedule (appliedCount: ${appliedCount})`);
                 }
             });
         });
+        
+        console.log(`\n✅ Finished loading schedules. Total applied: ${appliedCount}`);
         
     } catch (error) {
         console.error('Error loading schedules:', error);
