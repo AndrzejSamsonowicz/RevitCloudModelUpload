@@ -2283,7 +2283,14 @@ function renderFilesList() {
                         <option value="55">55</option>
                     </select>
                 </div>
-                <div style="font-size: 10px; color: #999;">Local time: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 10px; color: #999;">Local time: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}</div>
+                    <button class="clear-schedule-btn" data-file-id="${file.id}" data-model-guid="${file.modelGuid}" data-file-name="${file.name}" 
+                            style="padding: 2px 8px; font-size: 10px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; opacity: 0.7; transition: opacity 0.2s;"
+                            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Clear schedule for this file">
+                        Clear
+                    </button>
+                </div>
             </div>
         `;
         
@@ -2291,6 +2298,15 @@ function renderFilesList() {
         const publishTimeContainer = tdPublishTime.querySelector('.publish-time-container');
         if (publishTimeContainer) {
             publishTimeContainer.addEventListener('click', (e) => e.stopPropagation());
+            
+            // Add clear schedule button handler
+            const clearBtn = publishTimeContainer.querySelector('.clear-schedule-btn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await clearScheduleForFile(file.id, file.modelGuid, file.name);
+                });
+            }
         }
         
         tr.appendChild(tdCheckbox);
@@ -2830,6 +2846,105 @@ async function loadPublishingSchedules() {
         
     } catch (error) {
         console.error('Error loading schedules:', error);
+    }
+}
+
+/**
+ * Clear schedule for a specific file
+ * @param {string} fileId - The file ID
+ * @param {string} modelGuid - The model GUID
+ * @param {string} fileName - The file name
+ */
+async function clearScheduleForFile(fileId, modelGuid, fileName) {
+    try {
+        if (!confirm(`Clear publishing schedule for "${fileName}"?`)) {
+            return;
+        }
+        
+        // Clear UI inputs
+        const hourInput = document.querySelector(`.publish-hour-input[data-file-id="${fileId}"]`);
+        const minuteInput = document.querySelector(`.publish-minute-input[data-file-id="${fileId}"]`);
+        const checkboxes = document.querySelectorAll(`.weekday-checkbox[data-file-id="${fileId}"]`);
+        
+        if (hourInput) hourInput.value = '';
+        if (minuteInput) minuteInput.value = '';
+        if (checkboxes) {
+            checkboxes.forEach(cb => cb.checked = false);
+        }
+        
+        // Remove from Firestore
+        if (typeof firebase === 'undefined' || !userId) {
+            alert('Cannot save changes - not logged in');
+            return;
+        }
+        
+        const db = firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists) {
+            alert('User data not found');
+            return;
+        }
+        
+        const userData = userDoc.data();
+        let schedules = userData.publishingSchedules || [];
+        
+        // Decrypt schedules
+        if (schedules.length > 0) {
+            try {
+                const decryptResponse = await fetch('/api/encryption/decrypt-schedules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ schedules })
+                });
+                
+                if (decryptResponse.ok) {
+                    const decryptData = await decryptResponse.json();
+                    schedules = decryptData.schedules;
+                }
+            } catch (err) {
+                // Use raw schedules if decryption fails
+            }
+        }
+        
+        // Filter out the schedule matching this file's modelGuid
+        const filteredSchedules = schedules.filter(s => s.modelGuid !== modelGuid);
+        
+        if (filteredSchedules.length === schedules.length) {
+            alert('No schedule found for this file');
+            return;
+        }
+        
+        // Encrypt filtered schedules before saving
+        let encryptedSchedules = filteredSchedules;
+        if (filteredSchedules.length > 0) {
+            try {
+                const encryptResponse = await fetch('/api/encryption/encrypt-schedules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ schedules: filteredSchedules })
+                });
+                
+                if (encryptResponse.ok) {
+                    const encryptData = await encryptResponse.json();
+                    encryptedSchedules = encryptData.schedules;
+                }
+            } catch (err) {
+                console.error('Encryption error:', err);
+            }
+        }
+        
+        // Save back to Firestore
+        await db.collection('users').doc(userId).update({
+            publishingSchedules: encryptedSchedules,
+            schedulesUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        alert(`Schedule cleared for "${fileName}"`);
+        
+    } catch (error) {
+        console.error('Error clearing schedule:', error);
+        alert('Failed to clear schedule');
     }
 }
 
