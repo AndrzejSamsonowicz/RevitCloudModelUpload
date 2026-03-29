@@ -145,7 +145,7 @@ function shouldPublishNow(schedule, now) {
 async function triggerPublishing(userId, schedule) {
   try {
     // Hardcoded values (params API not working reliably)
-    const serverUrlValue = 'http://34.65.169.15:3000';
+    const serverUrlValue = 'https://rvtpub.digibuild.ch';
     const authKeyValue = 'h48qZSyxDkdbR1weAzFfjOuVYQtmETs2';
     
     // Prepare the publishing request
