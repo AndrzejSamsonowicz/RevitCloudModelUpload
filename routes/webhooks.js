@@ -162,10 +162,12 @@ async function triggerPublishModel(workitemId, metadata) {
                 `https://developer.api.autodesk.com/data/v1/projects/${metadata.projectId}/versions/${encodeURIComponent(metadata.itemId)}`,
                 { headers: { 'Authorization': `Bearer ${metadata.userToken}` } }
             );
-            const itemLink = versionResponse.data.relationships?.item?.data?.id;
+            const itemLink = versionResponse.data.data.relationships?.item?.data?.id;
             if (itemLink) {
                 lineageId = itemLink;
                 console.log(`[PublishModel] Lineage ID: ${lineageId}`);
+            } else {
+                console.log('[PublishModel] Warning: Could not extract lineage ID, using itemId directly');
             }
         }
 
