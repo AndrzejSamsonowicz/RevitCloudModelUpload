@@ -7,19 +7,37 @@
 - Node.js installed on VM
 - Git installed on VM
 
-## Deployment Steps
+## Quick Deployment (Recommended)
+
+Use the automated deployment script:
+
+```powershell
+.\deploy-to-vm.ps1 "Your commit message"
+```
+
+This will:
+1. Commit and push changes to GitHub
+2. Generate encryption key (if needed)
+3. Provide step-by-step VM deployment instructions
+4. Copy deployment command to clipboard
+
+## Manual Deployment Steps
 
 ### 1. Connect to VM
+
+**Option A - Google Cloud Console (Recommended):**
+1. Go to: https://console.cloud.google.com
+2. Navigate to: Compute Engine → VM instances
+3. Click SSH button next to your VM
+
+**Option B - Direct SSH:**
 ```bash
-# Replace with your VM connection command
-gcloud compute ssh your-vm-name --zone=your-zone
-# OR
-ssh username@your-vm-ip
+ssh samson090281@34.65.169.15
 ```
 
 ### 2. Navigate to project directory and pull latest code
 ```bash
-cd ~/RevitAutomation  # Or wherever your project is
+cd ~/revit-publisher
 git pull origin master
 ```
 
@@ -44,47 +62,82 @@ WEBHOOK_URL=http://YOUR_VM_PUBLIC_IP:3000/webhooks/design-automation
 WEBHOOK_URL=https://yourdomain.com/webhooks/design-automation
 ```
 
-### 5. Ensure Firebase credentials are present
+### 5. Configure Encryption Key (First Time Setup)
+
+**Generate key on local machine:**
+```bash
+node generate-encryption-key.js
+```
+
+**Add to VM's .env file:**
+```bash
+nano .env
+```
+
+Add this line (replace with your generated key):
+```env
+ENCRYPTION_KEY=your_generated_hex_key_here
+```
+
+Save and exit (Ctrl+X, Y, Enter).
+
+**Configure Cloud Functions (run on local machine):**
+```bash
+firebase functions:config:set encryption.key="your_generated_hex_key_here"
+firebase deploy --only functions
+```
+
+⚠️ **Important**: Use the SAME key for both VM and Cloud Functions!
+
+### 6. Ensure Firebase credentials are present
 ```bash
 # Check if Firebase service account file exists
 ls -la revitcloudmodelpublisher-firebase-adminsdk-*.json
 
 # If missing, upload it from your local machine:
 # (Run this from your LOCAL machine, not on VM)
-# scp revitcloudmodelpublisher-firebase-adminsdk-fbsvc-91a99e0dbe.json username@vm-ip:~/RevitAutomation/
+# scp revitcloudmodelpublisher-firebase-adminsdk-fbsvc-91a99e0dbe.json samson090281@34.65.169.15:~/revit-publisher/
 ```
 
-### 6. Restart the server
+### 7. Restart the server
 ```bash
-# Stop existing process
-pm2 stop server
-# OR
-pkill -f "node server.js"
+# Restart with pm2 (recommended)
+pm2 restart revit-publisher
 
-# Start with pm2 (recommended for production)
+# View logs to verify
+pm2 logs revit-publisher --lines 30
+
+# Alternative: Stop and start
+pm2 stop revit-publisher
 pm2 start server.js --name revit-publisher
 pm2 save
-
-# OR start directly
-node server.js &
 ```
 
-### 7. Verify deployment
+### 8. Verify deployment
 ```bash
 # Check if server is running
 pm2 status
-# OR
-curl http://localhost:3000
 
-# Check logs
+# Check server responds
+curl http://localhost:3000/health
+
+# Monitor logs
 pm2 logs revit-publisher
 ```
 
-### 8. Test webhooks
-1. Log into the app: http://YOUR_VM_IP:3000
-2. Set up a scheduled publish
-3. Wait for it to trigger
-4. Check Publishing History - it should automatically update from "pending" to "success"/"error"
+**Test encryption:**
+- Create a schedule in UI
+- Check browser console for: `✓ Schedules encrypted successfully`
+- Check Firestore: data should be encrypted (hex strings)
+- Reload page: schedules should display correctly (decrypted)
+
+### 9. Test complete deployment
+1. Log into the app: https://rvtpub.digibuild.ch
+2. Create a scheduled publish
+3. Check browser console for encryption confirmation
+4. Wait for Cloud Function to trigger
+5. Verify Publishing History updates automatically
+6. Check that schedules decrypt correctly on page reload
 
 ## Firewall Configuration
 
@@ -142,20 +195,24 @@ curl -X POST http://localhost:3000/api/workitem-status/update-pending-dev
 Ensure these are set in `.env` on the VM:
 
 - ✅ `PORT=3000`
-- ✅ `WEBHOOK_URL=http://YOUR_VM_PUBLIC_IP:3000/webhooks/design-automation`
+- ✅ `WEBHOOK_URL=http://34.65.169.15:3000/webhooks/design-automation`
 - ✅ `FIREBASE_SERVICE_ACCOUNT_PATH=./revitcloudmodelpublisher-firebase-adminsdk-*.json`
 - ✅ `CLOUD_FUNCTION_AUTH_KEY=your-secure-key`
-- ✅ `APS_CALLBACK_URL=http://YOUR_VM_PUBLIC_IP:3000/oauth/callback`
-- ✅ `APP_URL=http://YOUR_VM_PUBLIC_IP:3000`
+- ✅ `APS_CALLBACK_URL=https://rvtpub.digibuild.ch/oauth/callback`
+- ✅ `APP_URL=https://rvtpub.digibuild.ch`
+- ✅ `ENCRYPTION_KEY=your-generated-hex-key` **(NEW - Required for data encryption)**
 
 ## Success Criteria
 
-✅ Server accessible at http://YOUR_VM_IP:3000
+✅ Server accessible at https://rvtpub.digibuild.ch
 ✅ Users can log in
 ✅ Scheduled publishes trigger automatically
 ✅ Publishing History updates automatically (no stuck "pending" entries)
 ✅ File type badges display correctly (RCM purple, C4R teal)
 ✅ Error messages are clear and helpful
+✅ Schedule data encrypted in Firestore (hex strings for fileName/projectName)
+✅ Schedules decrypt correctly when loading UI
+✅ Cloud Functions decrypt schedules successfully (check logs)
 
 ## Next Steps After Deployment
 
