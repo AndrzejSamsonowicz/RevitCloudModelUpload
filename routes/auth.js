@@ -3,6 +3,7 @@ const router = express.Router();
 const apsClient = require('../services/apsClient');
 const admin = require('firebase-admin');
 const { decryptUserCredentials, encryptUserCredentials, verifyFirebaseToken } = require('./firebaseAuth');
+const { encrypt, decrypt } = require('../services/encryption');
 
 // Store user sessions (in production, use Redis or database)
 const sessions = new Map();
@@ -150,9 +151,13 @@ router.get('/callback', async (req, res) => {
             const userId = sessionState.firebaseUserId;
             const now = Date.now();
             
+            // Encrypt tokens before storing in Firestore
+            const encryptedAccessToken = encrypt(tokenData.accessToken);
+            const encryptedRefreshToken = encrypt(tokenData.refreshToken);
+            
             await db.collection('users').doc(userId).set({
-                apsToken: tokenData.accessToken,
-                apsRefreshToken: tokenData.refreshToken,
+                apsToken: encryptedAccessToken,
+                apsRefreshToken: encryptedRefreshToken,
                 apsTokenExpiry: now + (tokenData.expiresIn * 1000),
                 sessionId: sessionId,
                 apsUserId: userProfile.userId,
@@ -162,7 +167,7 @@ router.get('/callback', async (req, res) => {
                 lastLogin: now
             }, { merge: true });
             
-            console.log(`Stored tokens in Firestore for Firebase user: ${userId} (APS: ${userProfile.email})`);
+            console.log(`Stored encrypted tokens in Firestore for Firebase user: ${userId} (APS: ${userProfile.email})`);
         } catch (firestoreError) {
             console.error('Failed to store tokens in Firestore:', firestoreError);
             // Continue even if Firestore storage fails

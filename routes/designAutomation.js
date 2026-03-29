@@ -532,7 +532,11 @@ router.post('/scheduled-publish', async (req, res, next) => {
         }
         
         const userData = userDoc.data();
-        let userToken = userData.apsToken;
+        
+        // Decrypt tokens from Firestore
+        const { decrypt } = require('../services/encryption');
+        let userToken = decrypt(userData.apsToken);
+        let refreshToken = decrypt(userData.apsRefreshToken);
         
         // Check if token needs refresh
         const tokenExpiry = userData.apsTokenExpiry;
@@ -540,20 +544,21 @@ router.post('/scheduled-publish', async (req, res, next) => {
         
         if (!userToken || !tokenExpiry || now >= tokenExpiry) {
             // Token expired or missing, try to refresh
-            if (userData.apsRefreshToken) {
+            if (refreshToken) {
                 console.log('Refreshing expired token...');
                 try {
-                    const refreshedData = await apsClient.refreshToken(userData.apsRefreshToken);
+                    const refreshedData = await apsClient.refreshToken(refreshToken);
                     userToken = refreshedData.accessToken;
                     
-                    // Update token in Firestore
+                    // Encrypt tokens before storing back to Firestore
+                    const { encrypt } = require('../services/encryption');
                     await db.collection('users').doc(userId).update({
-                        apsToken: refreshedData.accessToken,
+                        apsToken: encrypt(refreshedData.accessToken),
                         apsTokenExpiry: now + (refreshedData.expiresIn * 1000),
-                        apsRefreshToken: refreshedData.refreshToken
+                        apsRefreshToken: encrypt(refreshedData.refreshToken)
                     });
                     
-                    console.log('Token refreshed successfully');
+                    console.log('Token refreshed and re-encrypted successfully');
                 } catch (refreshError) {
                     console.error('Token refresh failed:', refreshError);
                     return res.status(401).json({ 
