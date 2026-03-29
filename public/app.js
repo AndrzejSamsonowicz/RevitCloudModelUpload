@@ -1,3 +1,34 @@
+// Production Mode - Disable verbose logging for security
+const PRODUCTION_MODE = true; // Set to false for development debugging
+
+// Override console methods in production to prevent information leakage
+if (PRODUCTION_MODE) {
+    const originalError = console.error;
+    
+    console.log = function() {}; // No-op - completely silent
+    console.warn = function() {}; // No-op - completely silent
+    
+    // Sanitize error messages to not expose internal details
+    console.error = function() {
+        // Only show generic error message to users, no technical details
+        const args = Array.from(arguments);
+        const sanitized = args.map(arg => {
+            if (typeof arg === 'string') {
+                // Remove technical details like IDs, URNs, paths
+                return arg.replace(/urn:[^\s]+/g, '[ID]')
+                         .replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '[GUID]')
+                         .replace(/\/api\/[^\s]+/g, '[API]')
+                         .split(':')[0]; // Keep only the first part before colon
+            }
+            // Don't log objects/arrays in production (may contain sensitive data)
+            return typeof arg === 'object' ? '[Error details hidden]' : arg;
+        });
+        
+        // Only log the error type, not details
+        // originalError.apply(console, sanitized); // Uncomment to show sanitized errors
+    };
+}
+
 let sessionId = null;
 let userId = null; // Consistent APS user ID for Firestore
 let userEmail = null; // User email for permission checking
