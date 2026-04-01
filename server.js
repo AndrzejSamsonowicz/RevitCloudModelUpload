@@ -82,6 +82,10 @@ console.log('✓ WorkItem Poller initialized');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust the first proxy (nginx/load balancer) - required for rate limiting and IP detection
+// when the app runs behind a reverse proxy
+app.set('trust proxy', 1);
+
 // ===== SECURITY MIDDLEWARE =====
 
 // 1. Helmet - Security Headers
@@ -141,7 +145,7 @@ app.use(cors({
         if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
             callback(null, true);
         } else {
-            console.warn(`CORS blocked origin: ${origin}`);
+            // Silently reject - no logging to avoid noise from bots/scanners hitting the raw IP
             callback(new Error('Not allowed by CORS'));
         }
     },
