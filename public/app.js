@@ -1001,7 +1001,7 @@ async function publishModel() {
                 failCount++;
                 
                 // Determine if this is an RCM service access issue
-                let errorType = 'warning';
+                let errorType = 'error';
                 let errorMessage = 'Publish failed: disabled service i.e.: Cloud Models for Revit, or the file is corrupted';
                 let helpfulTip = '';
                 let isRCM = false;
@@ -3121,7 +3121,7 @@ async function refreshPublishingHistory() {
                     
                     // If entry is old and still has 'info' status, mark it as timeout
                     if (displayStatus === 'info' && entryAge > tenMinutes) {
-                        displayStatus = 'warning';
+                        displayStatus = 'error';
                         displayMessage = 'Scheduled publish timed out (no response from Design Automation)';
                     }
                     
