@@ -570,12 +570,15 @@ async function logout() {
         
         updateAuthUI(false);
         
-        // Redirect to login page
-        window.location.href = '/login';
+        // Redirect through Autodesk logout to clear the Autodesk browser session,
+        // then return to our login page
+        const postLogoutUrl = encodeURIComponent(window.location.origin + '/login');
+        window.location.href = `https://accounts.autodesk.com/Authentication/LogOut?resume=${postLogoutUrl}`;
     } catch (error) {
         console.error('Logout error:', error);
         // Still redirect even if logout API call fails
-        window.location.href = '/login';
+        const postLogoutUrl = encodeURIComponent(window.location.origin + '/login');
+        window.location.href = `https://accounts.autodesk.com/Authentication/LogOut?resume=${postLogoutUrl}`;
     }
 }
 
@@ -2589,7 +2592,27 @@ async function savePublishingSchedules() {
         const schedules = getAllPublishingSchedules();
         console.log('Collected schedules:', schedules.length, schedules);
 
-        // ===== VALIDATION 2: Ensure at least one day is selected for each schedule =====
+        // ===== VALIDATION 2a: Warn about RCM files (require special Design Automation setup) =====
+        const rcmSchedules = [];
+        schedules.forEach(schedule => {
+            const row = document.querySelector(`tr[data-file-id="${schedule.fileId}"]`);
+            if (row) {
+                const fileData = allRevitFiles.find(f => f.id === schedule.fileId);
+                if (fileData && fileData.modelType === 'singleuser') {
+                    rcmSchedules.push(fileData.name || schedule.fileName || 'Unknown');
+                }
+            }
+        });
+        
+        if (rcmSchedules.length > 0) {
+            showMessage(
+                'publishMessage',
+                `⚠️ Warning: ${rcmSchedules.join(', ')} — RCM files require "Cloud Models for Revit" service access and a configured Design Automation AppBundle/Activity. Scheduled publishing may fail if these are not set up for your account.`,
+                'warning'
+            );
+        }
+
+        // ===== VALIDATION 3: Ensure at least one day is selected for each schedule =====
         const invalidSchedules = [];
         const hourInputs = document.querySelectorAll('.publish-hour-input');
         
