@@ -133,7 +133,7 @@ class WorkItemPoller {
             finalMessage = `Published successfully via Design Automation`;
         } else if (status.status === 'failedInstructions') {
             finalStatus = 'error';
-            finalMessage = `WorkItem failedInstructions — The Activity or AppBundle is not configured correctly for this user's account. Verify the AppBundle is uploaded and Activities are created in Design Automation Setup.`;
+            finalMessage = `Publish failed: disabled service i.e.: Cloud Models for Revit, or the file is corrupted`;
         } else {
             finalStatus = 'error';
             finalMessage = `WorkItem ${status.status}. Check Design Automation logs for details.`;
