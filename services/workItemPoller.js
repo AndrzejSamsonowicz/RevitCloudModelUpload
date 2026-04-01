@@ -96,7 +96,9 @@ class WorkItemPoller {
                 
                 console.log(`[WorkItemPoller] WorkItem ${workItemId}: ${status.status}`);
 
-                if (status.status === 'success' || status.status === 'failed' || status.status === 'cancelled') {
+                if (status.status === 'success' || status.status === 'failed' || 
+                    status.status === 'cancelled' || status.status === 'failedInstructions' ||
+                    status.status === 'failedDownload' || status.status === 'failedUpload') {
                     // WorkItem completed - update Firestore and stop tracking (deletion happens in onWorkItemComplete)
                     await this.onWorkItemComplete(workItemId, info, status);
                 }
@@ -129,6 +131,9 @@ class WorkItemPoller {
         if (status.status === 'success') {
             finalStatus = 'success';
             finalMessage = `Published successfully via Design Automation`;
+        } else if (status.status === 'failedInstructions') {
+            finalStatus = 'error';
+            finalMessage = `WorkItem failedInstructions — The Activity or AppBundle is not configured correctly for this user's account. Verify the AppBundle is uploaded and Activities are created in Design Automation Setup.`;
         } else {
             finalStatus = 'error';
             finalMessage = `WorkItem ${status.status}. Check Design Automation logs for details.`;
