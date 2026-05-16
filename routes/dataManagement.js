@@ -256,6 +256,7 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
             
             return {
                 id: version.id,
+                itemId: version.relationships?.item?.data?.id || null, // Item (lineage) URN for C4R command
                 type: version.type,
                 name: version.attributes.displayName || version.attributes.name,
                 createTime: version.attributes.createTime,

@@ -152,6 +152,7 @@ async function triggerPublishing(userId, schedule) {
     const publishData = {
       userId: userId,
       fileId: schedule.fileId,
+      itemId: schedule.itemId || null, // Lineage URN (avoids runtime resolution for C4R)
       fileName: schedule.fileName,
       projectId: schedule.projectId, // Project ID in b.xxx format
       projectGuid: schedule.projectGuid,
@@ -159,6 +160,7 @@ async function triggerPublishing(userId, schedule) {
       region: schedule.region || 'US',
       engineVersion: schedule.engineVersion || '2024',
       extensionType: schedule.extensionType,
+      modelType: schedule.modelType || '',
       isCloudModel: schedule.isCloudModel
     };
     
@@ -184,11 +186,12 @@ async function triggerPublishing(userId, schedule) {
     
     console.log(`Publish response for ${schedule.fileName}:`, response.data);
     
-    // Get workItemId
+    // C4R files return commandId, RCM files return workItemId
     const workItemId = response.data.data?.workItemId;
+    const commandId = response.data.data?.commandId;
     
-    if (!workItemId) {
-      throw new Error('No workItemId returned from server');
+    if (!workItemId && !commandId) {
+      throw new Error('No workItemId or commandId returned from server');
     }
     
     // Save initial log entry - webhook will update it when workitem completes
@@ -203,9 +206,10 @@ async function triggerPublishing(userId, schedule) {
       isC4R: !isRCM && schedule.isCloudModel,
       scheduledTime: `${schedule.time} (${schedule.timezone})`,
       actualTime: new Date().toISOString(),
-      status: 'pending', // Will be updated by webhook
-      workItemId: workItemId,
-      message: isRCM ? 'Publishing RCM file via Design Automation...' : 'Publishing C4R file...',
+      status: workItemId ? 'pending' : 'success', // C4R completes immediately
+      workItemId: workItemId || null,
+      commandId: commandId || null,
+      message: isRCM ? 'Publishing RCM file via Design Automation...' : 'C4R publish command issued successfully',
       source: 'scheduled'
     });
     
@@ -221,6 +225,9 @@ async function triggerPublishing(userId, schedule) {
     let errorMessage = error.message;
     let helpfulTip = '';
     
+    // Log the full error for debugging
+    console.error(`[triggerPublishing] HTTP ${error.response?.status} response:`, JSON.stringify(error.response?.data));
+    
     // Provide helpful error messages based on error type
     if (fileIsRCM) {
       errorMessage = 'RCM files require Cloud Models for Revit access. This user may not have the required permissions to publish RCM files via Design Automation.';
@@ -228,6 +235,7 @@ async function triggerPublishing(userId, schedule) {
       errorMessage = '🔒 Authentication expired. Please log out and log back in to refresh your credentials.';
       helpfulTip = 'Your Autodesk login session has expired. Log out and log back in to continue scheduled publishing.';
     } else if (error.response?.data?.error) {
+      // Use the actual error message from the server (not the generic "Internal server error")
       errorMessage = error.response.data.error;
     }
     

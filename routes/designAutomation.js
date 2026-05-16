@@ -489,7 +489,7 @@ router.post('/workitems/batch-status', async (req, res, next) => {
  */
 router.post('/scheduled-publish', async (req, res, next) => {
     try {
-        const { userId, fileId, fileName, projectId, projectGuid, modelGuid, region, engineVersion } = req.body;
+        const { userId, fileId, itemId, fileName, projectId, projectGuid, modelGuid, region, engineVersion, modelType } = req.body;
         
         console.log('[Scheduled Publish] Request received from Cloud Function');
         console.log('[Scheduled Publish] Body:', { userId, fileId, fileName, projectId });
@@ -573,6 +573,108 @@ router.post('/scheduled-publish', async (req, res, next) => {
         }
         
         const callbackUrl = process.env.WEBHOOK_URL || `http://localhost:${process.env.PORT || 3000}/webhooks/design-automation`;
+        
+        // Route based on model type:
+        // C4R (multiuser / workshared) → C4RModelPublish command directly (no WorkItem needed)
+        // RCM (singleuser) → Design Automation WorkItem
+        const isC4R = modelType === 'multiuser';
+        
+        if (isC4R) {
+            console.log(`[Scheduled Publish] C4R file detected - using C4RModelPublish command directly`);
+            
+            const axios = require('axios');
+            
+            // Use itemId (lineage URN) directly if provided by the schedule (preferred).
+            // Fall back to resolving from fileId (version URN) for older schedules that
+            // don't yet have itemId stored.
+            let lineageId = itemId || null;
+            
+            if (!lineageId) {
+                // Legacy path: resolve version URN → item/lineage URN
+                if (fileId && fileId.includes('fs.file')) {
+                    try {
+                        const versionResponse = await axios.get(
+                            `https://developer.api.autodesk.com/data/v1/projects/${projectId}/versions/${encodeURIComponent(fileId)}`,
+                            { headers: { 'Authorization': `Bearer ${userToken}` } }
+                        );
+                        lineageId = versionResponse.data.data.relationships?.item?.data?.id;
+                        if (lineageId) {
+                            console.log(`[Scheduled Publish] Resolved lineage ID: ${lineageId}`);
+                        } else {
+                            console.error(`[Scheduled Publish] Version response missing item relationship - cannot build lineage ID`);
+                            console.error(`[Scheduled Publish] Version response:`, JSON.stringify(versionResponse.data?.data?.relationships));
+                            return res.status(400).json({ error: 'Could not resolve item lineage ID from version URN' });
+                        }
+                    } catch (err) {
+                        console.error(`[Scheduled Publish] Lineage resolution failed (HTTP ${err.response?.status}):`, err.response?.data || err.message);
+                        return res.status(500).json({ error: `Failed to resolve lineage ID: ${err.message}` });
+                    }
+                } else {
+                    // fileId might already be an item URN (non-fs.file format)
+                    lineageId = fileId;
+                }
+            }
+            
+            console.log(`[Scheduled Publish] Using lineage ID: ${lineageId}`);
+            
+            const payload = {
+                jsonapi: { version: '1.0' },
+                data: {
+                    type: 'commands',
+                    attributes: {
+                        extension: {
+                            type: 'commands:autodesk.bim360:C4RModelPublish',
+                            version: '1.0.0'
+                        }
+                    },
+                    relationships: {
+                        resources: {
+                            data: [{ type: 'items', id: lineageId }]
+                        }
+                    }
+                }
+            };
+            
+            let commandResponse;
+            try {
+                commandResponse = await axios.post(
+                    `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands`,
+                    payload,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${userToken}`,
+                            'Content-Type': 'application/vnd.api+json'
+                        }
+                    }
+                );
+            } catch (apsError) {
+                const apsStatus = apsError.response?.status;
+                // APS uses JSON:API error format
+                const apsDetail = apsError.response?.data?.errors?.[0]?.detail
+                    || apsError.response?.data?.detail
+                    || apsError.response?.data?.message
+                    || apsError.message;
+                console.error(`[Scheduled Publish] C4R command failed for ${fileName} - HTTP ${apsStatus}: ${apsDetail}`);
+                console.error('[Scheduled Publish] APS response body:', JSON.stringify(apsError.response?.data));
+                return res.status(apsStatus >= 400 && apsStatus < 600 ? apsStatus : 500).json({
+                    error: `C4R publish command failed (HTTP ${apsStatus}): ${apsDetail}`
+                });
+            }
+            
+            console.log(`[Scheduled Publish] ✓ C4R publish command issued for ${fileName}`);
+            
+            return res.json({
+                success: true,
+                data: {
+                    commandId: commandResponse.data.data.id,
+                    status: commandResponse.data.data.attributes.status
+                },
+                message: `Scheduled C4R publish initiated for ${fileName}`
+            });
+        }
+        
+        // RCM path: use Design Automation WorkItem
+        console.log(`[Scheduled Publish] RCM file detected - using Design Automation WorkItem`);
         
         // Always use Revit 2026 (newest version, backward compatible with older files)
         const result = await designAutomation.createWorkItem(
