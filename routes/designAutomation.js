@@ -584,10 +584,11 @@ router.post('/scheduled-publish', async (req, res, next) => {
             
             const axios = require('axios');
             
-            // Use itemId (lineage URN) directly if provided by the schedule (preferred).
-            // Fall back to resolving from fileId (version URN) for older schedules that
-            // don't yet have itemId stored.
-            let lineageId = itemId || null;
+            // Use itemId only if it's a genuine item/lineage URN (dm.lineage format).
+            // If itemId is a version URN (fs.file format) — same as fileId — ignore it
+            // and fall through to the resolution path below.
+            const isLineageUrn = itemId && itemId.includes('dm.lineage');
+            let lineageId = isLineageUrn ? itemId : null;
             
             if (!lineageId) {
                 // Legacy path: resolve version URN → item/lineage URN

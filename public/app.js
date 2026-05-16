@@ -2083,7 +2083,8 @@ function renderFilesList() {
         tr.dataset.fileId = file.id;
         tr.dataset.projectGuid = file.projectGuid;
         tr.dataset.modelGuid = file.modelGuid;
-        tr.dataset.itemId = file.itemId || file.id; // itemId = lineage URN, fallback to version URN
+        // Only store itemId if it's a genuine lineage URN (dm.lineage), not a version URN
+        tr.dataset.itemId = (file.itemId && file.itemId.includes('dm.lineage')) ? file.itemId : '';
         tr.dataset.fileName = file.name;
         tr.dataset.index = file.index;
         tr.dataset.region = window.selectedHubRegion || 'US';
@@ -2670,7 +2671,7 @@ async function savePublishingSchedules() {
                 projectName: selectedProjectName, // Add project name for display
                 projectGuid: row.dataset.projectGuid,
                 modelGuid: row.dataset.modelGuid,
-                itemId: row.dataset.itemId || null, // Lineage URN - avoids runtime resolution for C4R
+                itemId: (row.dataset.itemId && row.dataset.itemId.includes('dm.lineage')) ? row.dataset.itemId : null, // Lineage URN only
                 region: row.dataset.region || 'US',
                 // Add file type information
                 extensionType: fileData?.extensionType || '',
