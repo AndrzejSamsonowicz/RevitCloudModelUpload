@@ -144,9 +144,11 @@ function shouldPublishNow(schedule, now) {
  */
 async function triggerPublishing(userId, schedule) {
   try {
-    // Hardcoded values (params API not working reliably)
-    const serverUrlValue = 'https://rvtpub.digibuild.ch';
-    const authKeyValue = 'h48qZSyxDkdbR1weAzFfjOuVYQtmETs2';
+    const serverUrlValue = process.env.SERVER_URL || 'https://rvtpub.digibuild.ch';
+    const authKeyValue = process.env.CLOUD_FUNCTION_AUTH_KEY;
+    if (!authKeyValue) {
+      throw new Error('CLOUD_FUNCTION_AUTH_KEY is not set in the Cloud Functions environment (functions/.env)');
+    }
     
     // Prepare the publishing request
     const publishData = {
