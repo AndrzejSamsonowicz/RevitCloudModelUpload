@@ -11,19 +11,16 @@ const ALGORITHM = 'aes-256-gcm';
 // const AUTH_TAG_LENGTH = 16; // 128 bits (not used in Cloud Functions - only decrypt)
 
 /**
- * Get encryption key from Firebase Functions config
- * Set with: firebase functions:config:set encryption.key="YOUR_KEY_HERE"
+ * Get encryption key from the Cloud Functions environment (functions/.env).
+ * MUST match the VM server's ENCRYPTION_KEY, or scheduled-publish schedules
+ * (fileName / projectName are encrypted) can't be decrypted here.
  */
 function getEncryptionKey() {
-    const functions = require('firebase-functions');
-    
-    // Try to get from Firebase Functions config
-    const keyConfig = functions.config().encryption?.key;
-    
+    const keyConfig = process.env.ENCRYPTION_KEY;
+
     if (!keyConfig) {
-        console.warn('⚠️ encryption.key not set in Firebase Functions config');
-        console.warn('   Set it with: firebase functions:config:set encryption.key="YOUR_KEY"');
-        
+        console.warn('⚠️ ENCRYPTION_KEY not set in the Cloud Functions environment (functions/.env)');
+
         // Fallback key for development - MUST match server.js fallback
         return Buffer.from('12345678901234567890123456789012'); // 32 bytes
     }
