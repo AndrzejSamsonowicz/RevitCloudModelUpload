@@ -1,53 +1,118 @@
-# Firebase Authentication Setup Guide
-
-This guide will help you configure Firebase authentication for the Revit Cloud Model Publisher multi-tenant application.
+# Firebase Setup Guide for ACC User Management
 
 ## Overview
+This guide will help you set up Firebase Authentication and Firestore for the ACC User Management authentication system.
 
-The application now supports:
-- **User Registration & Login** with email/password
-- **Email Verification** for new accounts
-- **Password Reset** functionality
-- **License Management** with PayPal integration
-- **Encrypted Credential Storage** for each user's APS credentials
-- **Admin Dashboard** for user and license management
+## Estimated Time: 30 minutes
+## Estimated Cost: **FREE** (Firebase Free Tier includes 50K reads/day, 20K writes/day, 1GB storage)
 
-## Prerequisites
-
-1. Google account (for Firebase)
-2. PayPal developer account (for license purchases)
-3. Node.js installed on your system
+---
 
 ## Step 1: Create Firebase Project
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click "Add project"
-3. Enter project name: `revit-cloud-publisher` (or your preferred name)
-4. Disable Google Analytics (optional)
-5. Click "Create project"
+2. Click **"Add project"**
+3. Enter project name: `acc-user-management`
+4. **Disable** Google Analytics (optional, not needed)
+5. Click **"Create project"**
+6. Wait for provisioning (~30 seconds)
 
-## Step 2: Enable Firebase Authentication
+---
 
-1. In your Firebase project, go to **Build** > **Authentication**
-2. Click "Get started"
-3. Click on "Sign-in method" tab
-4. Enable **Email/Password** provider:
-   - Click on "Email/Password"
-   - Toggle "Enable"
-   - Click "Save"
+## Step 2: Enable Authentication
+
+1. In Firebase Console, click **"Authentication"** in left sidebar
+2. Click **"Get started"**
+3. Click **"Sign-in method"** tab
+4. Enable **"Email/Password"**
+   - Toggle **"Enable"** switch
+   - Click **"Save"**
+5. Configure email templates and sender:
+   - Click **"Templates"** tab
+   - **Customize "Email verification" template:**
+     - Click the pencil icon next to "Email address verification"
+     - Change sender name: `DigiB Build` (instead of accusermanagement)
+     - Scroll to bottom of email template
+     - Change `Your accusermanagement team` to `Your DigiB Build team`
+     - Click **"Save"**
+   - **Customize "Password reset" template:**
+     - Click the pencil icon next to "Password reset"
+     - Change sender name: `DigiB Build`
+     - Change `Your accusermanagement team` to `Your DigiB Build team`
+     - Click **"Save"**
+   - **See Step 2a below for custom email domain setup (requires paid plan)**
+
+---
+
+## Step 2a: Custom Email Domain (Optional but Recommended)
+
+To send emails from `noreply@digibuild.ch` instead of `noreply@accusermanagement.firebaseapp.com`:
+
+### Option 1: SMTP Relay (Easiest - Requires Blaze Plan)
+
+1. Firebase Console > **Authentication** > **Templates** tab
+2. Click **"Customize email templates"** (requires Firebase Blaze plan upgrade)
+3. Click **"SMTP Settings"**
+4. Configure your email provider:
+
+**For Gmail/Google Workspace:**
+```
+SMTP Host: smtp.gmail.com
+Port: 587
+Username: noreply@digibuild.ch
+Password: [App Password - see below]
+From Address: noreply@digibuild.ch
+From Name: DigiB Build ACC User Management
+```
+
+**To create Gmail App Password:**
+- Go to Google Account > Security > 2-Step Verification
+- Scroll to "App passwords"
+- Generate password for "Mail"
+- Copy the 16-character password
+
+**For Other Providers (Mailgun, SendGrid, AWS SES):**
+- Get SMTP credentials from your email provider
+- Use their SMTP host and port
+- Enter credentials in Firebase
+
+### Option 2: Custom Domain Email (Free but Limited)
+
+Firebase doesn't support custom domains on the free Spark plan, but you can:
+
+1. **Customize the sender name only:**
+   - Firebase Console > **Authentication** > **Templates**
+   - Edit "Email verification" template
+   - Change sender name to: `DigiB Build <noreply@accusermanagement.firebaseapp.com>`
+   - Users will see "DigiB Build" as sender
+
+2. **Use a professional email provider:**
+   - Set up forwarding: `noreply@accusermanagement.firebaseapp.com` → `noreply@digibuild.ch`
+   - Requires Firebase Blaze plan for custom SMTP
+
+### Option 3: Use Cloud Functions (Advanced)
+
+Create custom email sending with your own SMTP in Cloud Functions:
+- Requires Firebase Blaze plan
+- Use Nodemailer with your SMTP
+- More control but more complex
+
+**Note:** For production use, Option 1 (SMTP Relay) is recommended for deliverability and professional branding
+
+---
 
 ## Step 3: Create Firestore Database
 
-1. Go to **Build** > **Firestore Database**
-2. Click "Create database"
-3. Choose **Production mode** (we'll configure rules next)
-4. Select a location closest to your users
-5. Click "Enable"
+1. In Firebase Console, click **"Firestore Database"**
+2. Click **"Create database"**
+3. Select **"Start in production mode"** (we'll add security rules later)
+4. Choose location: **us-central** (or nearest to your users)
+5. Click **"Enable"**
+6. Wait for provisioning (~1 minute)
 
-### Configure Firestore Security Rules
+### Set Security Rules
 
-1. Go to **Firestore Database** > **Rules**
-2. Replace the default rules with:
+Click **"Rules"** tab and replace with:
 
 ```javascript
 rules_version = '2';
@@ -58,293 +123,222 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Licenses collection - users can only read their own license
-    match /licenses/{licenseKey} {
+    // Licenses collection - read-only for authenticated users
+    match /licenses/{licenseId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only server can write
+    }
+    
+    // Admin collection - only for admin users
+    match /admins/{adminId} {
       allow read: if request.auth != null && 
-                     resource.data.userId == request.auth.uid;
-      allow write: if false; // Only admin can write
+                     exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow write: if false; // Only server can write
     }
     
-    // Analytics collection - no direct access
-    match /analytics/{document} {
-      allow read, write: if false;
+    // Analytics collection - admin only
+    match /analytics/{document=**} {
+      allow read: if request.auth != null && 
+                     exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow write: if false; // Only server can write
     }
-    
-    // Admin routes accessible only via backend
   }
 }
 ```
 
-3. Click "Publish"
+Click **"Publish"**
 
-## Step 4: Get Firebase Client Credentials
+---
 
-### For Web App (Client-side)
+## Step 4: Register Web App
 
-1. In Firebase Console, go to **Project settings** (gear icon)
-2. Scroll to "Your apps" section
-3. Click the **Web** icon (</>)
-4. Register app:
-   - App nickname: `Revit Cloud Publisher Web`
-   - Don't check "Firebase Hosting" (we'll use our own server)
-   - Click "Register app"
-5. Copy the `firebaseConfig` object
-6. Open `public/firebase-config.js` in your project
-7. Replace the placeholder values with your actual Firebase config:
+1. In Firebase Console, go to **Project Settings** (gear icon)
+2. Scroll down to **"Your apps"** section
+3. Click **Web icon** (</> symbol)
+4. Enter app nickname: `ACC User Management Web`
+5. **Do NOT** check "Firebase Hosting" (we use Google Cloud VM)
+6. Click **"Register app"**
+7. **Copy the configuration object** - you'll need this!
 
 ```javascript
 const firebaseConfig = {
-    apiKey: "YOUR_ACTUAL_API_KEY",
-    authDomain: "your-project-id.firebaseapp.com",
-    projectId: "your-project-id",
-    storageBucket: "your-project-id.appspot.com",
-    messagingSenderId: "123456789012",
-    appId: "1:123456789012:web:abcdef123456",
-    measurementId: "G-XXXXXXXXXX" // Optional
+  apiKey: "AIza...",
+  authDomain: "acc-user-management.firebaseapp.com",
+  projectId: "acc-user-management",
+  storageBucket: "acc-user-management.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123"
 };
 ```
 
-### For Server (Firebase Admin SDK)
+8. Paste this into `firebase-config.js` (replace the placeholder values)
+9. Click **"Continue to console"**
 
-1. In Firebase Console, go to **Project settings** > **Service accounts**
-2. Click "Generate new private key"
-3. Click "Generate key" (this downloads a JSON file)
-4. Save this file as `firebase-service-account.json` in your project root
-5. **IMPORTANT**: Add this file to `.gitignore`:
+---
 
-```bash
-# .gitignore
-firebase-service-account.json
-.env
-```
+## Step 5: Generate Service Account (for Server)
 
-## Step 5: Configure Environment Variables
+1. In Firebase Console, go to **Project Settings** > **Service Accounts** tab
+2. Click **"Generate new private key"**
+3. Click **"Generate key"** in the dialog
+4. A JSON file will download - **KEEP THIS SECURE!**
+5. Open the downloaded JSON file
+6. Copy these values to your `.env` file:
+   - `project_id` → `FIREBASE_PROJECT_ID`
+   - `private_key` → `FIREBASE_PRIVATE_KEY` (keep the quotes and \n characters!)
+   - `client_email` → `FIREBASE_CLIENT_EMAIL`
 
-1. Copy `.env.template` to `.env` (if it doesn't exist):
+---
 
-```bash
-cp .env.template .env
-```
+## Step 6: Configure Environment Variables
 
-2. Edit `.env` and configure:
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
 
-```bash
-# Autodesk Platform Services
-APS_CLIENT_ID=your_aps_client_id
-APS_CLIENT_SECRET=your_aps_client_secret
-APS_CALLBACK_URL=http://localhost:3000/oauth/callback
+2. Edit `.env` and fill in:
+   - Firebase values from Step 5
+   - Generate encryption key:
+     ```bash
+     node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+     ```
+   - PayPal credentials (see PAYPAL_SETUP.md)
+   - Admin email address
 
-# Server
-PORT=3000
-NODE_ENV=development
+3. **IMPORTANT**: Add `.env` to `.gitignore` (never commit secrets!)
 
-# Firebase Admin SDK - Option 1: Use service account file
-FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
+---
 
-# Firebase Admin SDK - Option 2: Use environment variables (alternative)
-# FIREBASE_PROJECT_ID=your-project-id
-# FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-# FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxx@your-project.iam.gserviceaccount.com
+## Step 7: Initialize Firestore Collections
 
-# PayPal Configuration
-PAYPAL_CLIENT_ID=your_paypal_client_id
-PAYPAL_CLIENT_SECRET=your_paypal_client_secret
-PAYPAL_MODE=sandbox  # Change to 'live' for production
+The server will automatically create collections on first use, but you can manually create them:
 
-# Admin Configuration
-ADMIN_EMAIL=your_admin_email@example.com
+1. In Firestore, click **"Start collection"**
+2. Create these collections:
 
-# Session Secret
-SESSION_SECRET=generate_a_random_secret_key_here
-```
+### Collection: `users`
+- Document ID: (auto-generated)
+- Fields:
+  - `email`: string
+  - `licenseKey`: string
+  - `licenseExpiry`: timestamp
+  - `clientId`: string (encrypted)
+  - `clientSecret`: string (encrypted)
+  - `encryptionIV`: string
+  - `createdAt`: timestamp
+  - `lastLogin`: timestamp
+  - `emailVerified`: boolean
 
-## Step 6: Setup PayPal for License Purchases
+### Collection: `licenses`
+- Document ID: (license key)
+- Fields:
+  - `userId`: string
+  - `email`: string
+  - `status`: string (active/expired/revoked)
+  - `purchaseDate`: timestamp
+  - `expiryDate`: timestamp
+  - `paypalOrderId`: string
+  - `price`: number
+  - `currency`: string
 
-1. Go to [PayPal Developer Dashboard](https://developer.paypal.com/)
-2. Log in with your PayPal account
-3. Go to **Apps & Credentials**
-4. Create a new app:
-   - Click "Create App"
-   - App Name: `Revit Cloud Publisher`
-   - App Type: **Merchant**
-   - Click "Create App"
-5. Copy your credentials:
-   - **Client ID** → `PAYPAL_CLIENT_ID` in `.env`
-   - **Secret** → `PAYPAL_CLIENT_SECRET` in `.env`
-6. For testing, use **Sandbox** mode (`PAYPAL_MODE=sandbox`)
-7. For production, switch to **Live** credentials and set `PAYPAL_MODE=live`
+### Collection: `admins`
+- Document ID: (admin user ID)
+- Fields:
+  - `email`: string
+  - `role`: string (super_admin/admin)
+  - `createdAt`: timestamp
 
-## Step 7: Install Dependencies
+### Collection: `analytics`
+- Document ID: (auto-generated)
+- Fields:
+  - `userId`: string
+  - `action`: string
+  - `timestamp`: timestamp
+  - `metadata`: map
 
-```bash
-npm install
-```
+---
 
-This will install:
-- `firebase-admin` - Server-side Firebase SDK
-- `@paypal/checkout-server-sdk` - PayPal integration
-- All existing dependencies
+## Step 8: Create First Admin User
 
-## Step 8: Create Admin User
+1. Run the server: `npm start`
+2. Use the admin creation endpoint (details in API documentation)
+3. Or manually add to `admins` collection in Firestore Console
 
-After the first user registers, you need to manually set them as admin:
+---
 
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Go to **Firestore Database**
-3. Find the `users` collection
-4. Find your user document (by email)
-5. Click "Edit"
-6. Add a new field:
-   - Field: `isAdmin`
-   - Type: `boolean`
-   - Value: `true`
-7. Click "Update"
+## Step 9: Enable Email Verification (Optional but Recommended)
 
-Now this user can access the admin dashboard at `/admin`.
+1. In Firebase Console → **Authentication** → **Templates**
+2. Click **"Email address verification"**
+3. Customize the email template
+4. Add your company name and logo
+5. Save changes
 
-## Step 9: Start the Server
+---
 
-```bash
-npm start
-```
+## Security Best Practices
 
-The server will log:
-```
-✓ Server running on http://localhost:3000
-✓ Environment: development
-✓ APS Client ID: ***XXXX
-✓ Firebase: Connected
-```
+✅ **DO:**
+- Keep `.env` file secret (add to `.gitignore`)
+- Use strong passwords for admin accounts
+- Regularly rotate encryption keys
+- Monitor Firebase Console for unusual activity
+- Enable Firebase App Check (optional, advanced)
 
-## Step 10: Test the Application
+❌ **DON'T:**
+- Commit `.env` or service account JSON to Git
+- Share Firebase config publicly (apiKey is okay, but keep project ID semi-private)
+- Use same Firebase project for dev and production
 
-### User Flow:
+---
 
-1. **Register**: Visit `http://localhost:3000/register`
-   - Enter email, password
-   - Optionally enter license key (or purchase later)
-   - Click "Create Account"
-   - Check email for verification link
+## Testing the Setup
 
-2. **Verify Email**: Click the link in the verification email
+1. Start the server: `npm start`
+2. Navigate to: `http://localhost:3000/login.html`
+3. Try registering a new account
+4. Check Firebase Console → Authentication (user should appear)
+5. Check Firestore → users collection (user data should appear)
 
-3. **Login**: Visit `http://localhost:3000/login`
-   - Enter email and password
-   - Click "Log In"
-
-4. **Purchase License** (if needed): Visit `http://localhost:3000/purchase`
-   - Enter email
-   - Click PayPal button
-   - Complete payment
-   - License key sent to email
-
-5. **Access Dashboard**: Automatic redirect to `/dashboard`
-   - View license status
-   - Configure APS credentials (encrypted and stored per user)
-   - Publish Revit models
-
-### Admin Flow:
-
-1. **Login as Admin**: Use the admin account you created
-2. **Access Admin Panel**: Visit `http://localhost:3000/admin`
-3. **Manage Users**: View all users, activate/deactivate licenses
-4. **Manage Licenses**: Manually activate licenses for users
-5. **View Analytics**: See payment and usage data
-
-## Security Features
-
-### Client-Side Authentication (Firebase Auth)
-- Email/password authentication
-- Email verification required
-- Password reset via email
-- Session management with Firebase tokens
-
-### Server-Side Authentication (Firebase Admin SDK)
-- Token verification on API requests
-- Secure user data access
-- License validation before allowing access
-
-### Encrypted Credential Storage
-Each user's APS credentials are:
-1. Encrypted in the browser using AES-256
-2. Stored in Firestore (encrypted)
-3. Decrypted only when needed
-4. Never exposed to other users
-5. Never logged or transmitted unencrypted
-
-### Multi-Tenant Isolation
-- Each user has their own credential set
-- Users cannot access other users' data
-- Firestore rules enforce data isolation
-- Admin SDK validates all backend operations
+---
 
 ## Troubleshooting
 
-### "Firebase credentials not configured"
-- Ensure `firebase-service-account.json` exists in project root
-- Or set individual environment variables (`FIREBASE_PRIVATE_KEY`, etc.)
-- Check file path in `.env`
+### "Firebase: Error (auth/invalid-api-key)"
+- Check that `firebase-config.js` has correct values from Firebase Console
 
-### "AUTH-001" Error on Login
-- Verify `firebaseConfig` in `public/firebase-config.js`
-- Check email verification is enabled in Firebase Console
-- Ensure user verified their email
+### "Firebase Admin SDK authentication error"
+- Check `.env` file has correct service account credentials
+- Ensure `FIREBASE_PRIVATE_KEY` includes `\n` characters (line breaks)
 
-### "License Required" Error
-- User needs active license
-- Admin can manually activate license in admin panel
-- Or user can purchase license at `/purchase`
+### "Permission denied" in Firestore
+- Check Security Rules are published correctly
+- Ensure user is authenticated before accessing Firestore
 
-### PayPal Integration Issues
-- Verify PayPal credentials in `.env`
-- Check `PAYPAL_MODE` is set correctly (sandbox/live)
-- Ensure PayPal app is approved for production (if using live mode)
+### Email verification not sending
+- Check Firebase Console → Authentication → Templates
+- Verify email domain is authorized
 
-### Cannot Access Admin Panel
-- Ensure `isAdmin: true` is set in Firestore for your user
-- Check console for authentication errors
-- Verify you're logged in as the correct user
+---
 
-## Production Deployment
+## Next Steps
 
-### Security Checklist:
+1. Complete PayPal setup (see `PAYPAL_SETUP.md`)
+2. Deploy to Google Cloud (see `GOOGLE_CLOUD_DEPLOYMENT.md`)
+3. Test complete user journey: register → verify email → purchase license → use tool
+4. Set up monitoring and backups
 
-1. **Environment Variables**:
-   - Never commit `.env` or `firebase-service-account.json`
-   - Use secure environment variable storage (e.g., Google Cloud Secret Manager)
+---
 
-2. **Firestore Rules**:
-   - Review and test security rules
-   - Never use `allow read, write: if true` in production
+## Cost Monitoring
 
-3. **HTTPS**:
-   - Use SSL certificate (Let's Encrypt)
-   - Update all callback URLs to `https://`
+Firebase Free Tier limits:
+- **Authentication**: 50,000 active users/month (FREE)
+- **Firestore reads**: 50,000/day (FREE)
+- **Firestore writes**: 20,000/day (FREE)
+- **Storage**: 1 GB (FREE)
 
-4. **Firebase Auth**:
-   - Configure authorized domains in Firebase Console
-   - Add your production domain to authorized domains
+For 100 customers with moderate usage, you should stay within free tier!
 
-5. **PayPal**:
-   - Switch to live credentials
-   - Set `PAYPAL_MODE=live`
-   - Update webhook URLs
-
-6. **API Keys**:
-   - Restrict Firebase API keys by domain/IP
-   - Use Firebase App Check for additional security
-
-## Additional Resources
-
-- [Firebase Documentation](https://firebase.google.com/docs)
-- [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup)
-- [Firestore Security Rules](https://firebase.google.com/docs/firestore/security/get-started)
-- [PayPal Developer Docs](https://developer.paypal.com/docs/api/overview/)
-
-## Support
-
-For issues or questions:
-1. Check Firebase Console for errors
-2. Review server logs (`npm start`)
-3. Check browser console for client-side errors
-4. Verify all environment variables are set correctly
+Monitor usage: Firebase Console → Usage and billing
