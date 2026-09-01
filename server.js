@@ -28,56 +28,55 @@ if (process.env.ENCRYPTION_KEY.length < 64) {
     process.exit(1);
 }
 
-// Initialize services
-const designAutomation = require('./services/designAutomation');
-const WorkItemPoller = require('./services/workItemPoller');
-
 // Initialize routes
 const authRoutes = require('./routes/auth');
 const designAutomationRoutes = require('./routes/designAutomation');
-const webhookRoutes = require('./routes/webhooks');
-const workitemStatusRoutes = require('./routes/workitemStatus');
 const dataManagementRoutes = require('./routes/dataManagement');
 const { router: firebaseAuthRoutes } = require('./routes/firebaseAuth');
 const licenseRoutes = require('./routes/licenses');
 const adminToolsRoutes = require('./routes/adminTools');
 const encryptionRoutes = require('./routes/encryption');
 
-// Initialize Firebase Admin SDK
+// Initialize Firebase Admin SDK.
+// Preferred path on GCE: Application Default Credentials (ADC) — the VM has a service
+// account attached, and the Admin SDK gets short-lived tokens from the metadata server.
+// No key file on disk. Requires FIREBASE_PROJECT_ID to name the target Firebase project
+// (needed because the VM may run in a different GCP project — see VM_FIREBASE_INTEGRATION_GUIDE.md).
+// A service-account key (file or split env vars) is still honoured for local dev / legacy.
 try {
-    let serviceAccount;
-    
-    // Try to load service account from file
+    const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
+    let serviceAccount = null;
+
     if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
         serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
     } else if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-        // Use individual credentials from environment variables
         serviceAccount = {
             type: "service_account",
             project_id: process.env.FIREBASE_PROJECT_ID,
             private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
             client_email: process.env.FIREBASE_CLIENT_EMAIL
         };
-    } else {
-        console.warn('⚠ Firebase credentials not configured. Authentication features will be disabled.');
     }
-    
+
     if (serviceAccount) {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
-            databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
+            projectId: serviceAccount.project_id
         });
-        console.log('✓ Firebase Admin SDK initialized');
+        console.log('✓ Firebase Admin SDK initialized (service account key)');
+    } else if (firebaseProjectId) {
+        admin.initializeApp({
+            credential: admin.credential.applicationDefault(),
+            projectId: firebaseProjectId
+        });
+        console.log(`✓ Firebase Admin SDK initialized via ADC (project: ${firebaseProjectId})`);
+    } else {
+        console.warn('⚠ Firebase not configured: set FIREBASE_PROJECT_ID (for ADC) or a service account. Authentication features will be disabled.');
     }
 } catch (error) {
     console.error('✗ Failed to initialize Firebase Admin SDK:', error.message);
     console.warn('⚠ Authentication features will be disabled.');
 }
-
-// Initialize WorkItem Poller (for tracking scheduled publish WorkItems)
-const workItemPoller = new WorkItemPoller(designAutomation);
-global.workItemPoller = workItemPoller; // Make available globally
-console.log('✓ WorkItem Poller initialized');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -215,8 +214,6 @@ app.use('/api/data-management', apiLimiter, dataManagementRoutes);
 app.use('/api/admin', apiLimiter, adminToolsRoutes);
 app.use('/api/encryption', apiLimiter, encryptionRoutes);
 app.use('/api', apiLimiter, licenseRoutes);
-app.use('/webhooks', webhookRoutes); // No rate limit on webhooks
-app.use('/api/workitem-status', apiLimiter, workitemStatusRoutes);
 
 // Serve frontend pages
 app.get('/', (req, res) => {

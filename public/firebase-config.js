@@ -3,13 +3,13 @@
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 
 const firebaseConfig = {
-    apiKey: "AIzaSyC28U61MycJw9fw3EHXAm0Yud393vN_QS0",
-    authDomain: "revitcloudmodelpublisher.firebaseapp.com",
-    projectId: "revitcloudmodelpublisher",
-    storageBucket: "revitcloudmodelpublisher.firebasestorage.app",
-    messagingSenderId: "353956479013",
-    appId: "1:353956479013:web:7a46e0fd73133af8ef3fcc",
-    measurementId: "G-6TSZ6VL8G9"
+    apiKey: "AIzaSyBIBpH9SsM_8PV3UVDcz2Y-7yjGoF_9HmE",
+    authDomain: "revit-publisher-firebase.firebaseapp.com",
+    projectId: "revit-publisher-firebase",
+    storageBucket: "revit-publisher-firebase.firebasestorage.app",
+    messagingSenderId: "386481775049",
+    appId: "1:386481775049:web:c2e61a304c03dc2e1a4818",
+    measurementId: "G-2X25H505QW"
 };
 
 // Note: Firebase credentials are safe to use in client-side code as they

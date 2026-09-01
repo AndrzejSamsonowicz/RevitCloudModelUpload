@@ -185,11 +185,12 @@ async function triggerPublishing(userId, schedule) {
     );
     
     console.log(`Publish response for ${schedule.fileName}:`, response.data);
-    
-    // C4R files return commandId, RCM files return workItemId
+
+    // Both RCM and C4R now publish via the C4RModelPublish command and return a commandId.
+    // workItemId is only present for legacy Design Automation responses.
     const workItemId = response.data.data?.workItemId;
     const commandId = response.data.data?.commandId;
-    
+
     if (!workItemId && !commandId) {
       throw new Error('No workItemId or commandId returned from server');
     }
@@ -206,10 +207,10 @@ async function triggerPublishing(userId, schedule) {
       isC4R: !isRCM && schedule.isCloudModel,
       scheduledTime: `${schedule.time} (${schedule.timezone})`,
       actualTime: new Date().toISOString(),
-      status: workItemId ? 'pending' : 'success', // C4R completes immediately
+      status: workItemId ? 'pending' : 'success', // publish command completes immediately
       workItemId: workItemId || null,
       commandId: commandId || null,
-      message: isRCM ? 'Publishing RCM file via Design Automation...' : 'C4R publish command issued successfully',
+      message: 'Publish command issued successfully',
       source: 'scheduled'
     });
     
@@ -228,10 +229,8 @@ async function triggerPublishing(userId, schedule) {
     // Log the full error for debugging
     console.error(`[triggerPublishing] HTTP ${error.response?.status} response:`, JSON.stringify(error.response?.data));
     
-    // Provide helpful error messages based on error type
-    if (fileIsRCM) {
-      errorMessage = 'RCM files require Cloud Models for Revit access. This user may not have the required permissions to publish RCM files via Design Automation.';
-    } else if (error.response?.status === 401 || error.message.includes('401')) {
+    // Surface the real failure. Prefer the server's error message; special-case auth expiry.
+    if (error.response?.status === 401 || error.message.includes('401')) {
       errorMessage = '🔒 Authentication expired. Please log out and log back in to refresh your credentials.';
       helpfulTip = 'Your Autodesk login session has expired. Log out and log back in to continue scheduled publishing.';
     } else if (error.response?.data?.error) {
@@ -273,57 +272,6 @@ exports.triggerScheduleCheck = functions.region('europe-west6').https.onRequest(
     res.json({ success: true, result });
   } catch (error) {
     console.error('Error triggering schedule check:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * Poll workitem status for pending logs and update them
- * Runs every 2 minutes to check completion
- */
-exports.checkWorkItemStatus = functions.region('europe-west6').pubsub
-  .schedule('*/2 * * * *') // Run every 2 minutes
-  .timeZone('UTC')
-  .onRun(async () => {
-    console.log('Checking workitem status for pending logs...');
-    
-    try {
-      // Use environment variables directly
-      const serverUrlValue = process.env.SERVER_URL || 'http://localhost:3000';
-      const authKeyValue = process.env.CLOUD_FUNCTION_AUTH_KEY;
-      
-      console.log(`Using server URL: ${serverUrlValue}`);
-      
-      // Call server endpoint to check pending workitems
-      const response = await axios.post(
-        `${serverUrlValue}/api/workitem-status/check-pending`,
-        {},
-        {
-          headers: {
-            'authKey': authKeyValue
-          },
-          timeout: 30000
-        }
-      );
-      
-      console.log('WorkItem check response:', response.data);
-      return response.data;
-      
-    } catch (error) {
-      console.error('Error checking workitem status:', error.message);
-      throw error;
-    }
-  });
-
-/**
- * HTTP endpoint to manually trigger workitem status check (for testing)
- */
-exports.triggerWorkItemCheck = functions.region('europe-west6').https.onRequest(async (req, res) => {
-  try {
-    const result = await exports.checkWorkItemStatus.run();
-    res.json({ success: true, result });
-  } catch (error) {
-    console.error('Error triggering workitem check:', error);
     res.status(500).json({ error: error.message });
   }
 });

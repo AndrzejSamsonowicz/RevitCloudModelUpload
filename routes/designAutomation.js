@@ -9,6 +9,7 @@ const designAutomation = require('../services/designAutomation');
 const authRoutes = require('./auth');
 const axios = require('axios');
 const apsClient = require('../services/apsClient');
+const { resolveLineageId, publishModel } = require('../services/apsPublish');
 
 // Secure file upload configuration
 const upload = multer({
@@ -333,75 +334,7 @@ router.get('/activities/check', async (req, res, next) => {
 });
 
 /**
- * Create WorkItem to publish cloud model
- */
-router.post('/workitem/create', async (req, res, next) => {
-    try {
-        const { sessionId, region, projectGuid, modelGuid, revitVersion } = req.body;
-
-        if (!sessionId || !region || !projectGuid || !modelGuid) {
-            return res.status(400).json({ 
-                error: 'Missing required parameters: sessionId, region, projectGuid, modelGuid' 
-            });
-        }
-
-        // Get user's 3-legged token
-        const userToken = authRoutes.getUserToken(sessionId);
-        if (!userToken) {
-            return res.status(401).json({ error: 'User not authenticated' });
-        }
-
-        const callbackUrl = process.env.WEBHOOK_URL || `http://localhost:${process.env.PORT || 3000}/webhooks/design-automation`;
-
-        const result = await designAutomation.createWorkItem(
-            { region, projectGuid, modelGuid },
-            userToken,
-            callbackUrl,
-            revitVersion || '2026'
-        );
-
-        // Store metadata for webhook to call PublishModel when WorkItem succeeds
-        const webhookRoutes = require('./webhooks');
-        const projectIdForPublish = `b.${projectGuid}`;
-        
-        // Construct lineage URN from modelGuid (format: urn:adsk.wipXXX:dm.lineage:<guid>)
-        const regionPrefix = region === 'EMEA' ? 'wipemea' : (region === 'US' ? 'wipproduswest2' : 'wip');
-        const lineageId = `urn:adsk.${regionPrefix}:dm.lineage:${modelGuid}`;
-        
-        webhookRoutes.storeWorkitemMetadata(result.workItemId, {
-            shouldPublish: true,
-            projectId: projectIdForPublish,
-            itemId: lineageId,
-            userToken: userToken
-        });
-        
-        console.log(`✓ Stored metadata for WorkItem ${result.workItemId} to trigger PublishModel on completion`);
-
-        res.json({ 
-            success: true, 
-            data: result,
-            message: 'WorkItem created. Check webhook for completion.'
-        });
-    } catch (error) {
-        // Check if error is related to missing Activity
-        if (error.response?.status === 400 || error.response?.status === 404) {
-            const errorMessage = error.response?.data?.detail || error.response?.data || error.message;
-            
-            // Check if it's an Activity not found error
-            if (typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('activity')) {
-                const version = revitVersion || '2026';
-                return next(new Error(
-                    `Activity for Revit ${version} not found. Please create Activities in Settings → Design Automation Setup.`
-                ));
-            }
-        }
-        
-        next(error);
-    }
-});
-
-/**
- * Get WorkItem status
+ * Get WorkItem status (used by the Revit-version-detection feature)
  */
 router.get('/workitem/:workItemId/status', async (req, res, next) => {
     try {
@@ -572,172 +505,51 @@ router.post('/scheduled-publish', async (req, res, next) => {
             }
         }
         
-        const callbackUrl = process.env.WEBHOOK_URL || `http://localhost:${process.env.PORT || 3000}/webhooks/design-automation`;
-        
-        // Route based on model type:
-        // C4R (multiuser / workshared) → C4RModelPublish command directly (no WorkItem needed)
-        // RCM (singleuser) → Design Automation WorkItem
-        const isC4R = modelType === 'multiuser';
-        
-        if (isC4R) {
-            console.log(`[Scheduled Publish] C4R file detected - using C4RModelPublish command directly`);
-            
-            const axios = require('axios');
-            
-            // Use itemId only if it's a genuine item/lineage URN (dm.lineage format).
-            // If itemId is a version URN (fs.file format) — same as fileId — ignore it
-            // and fall through to the resolution path below.
-            const isLineageUrn = itemId && itemId.includes('dm.lineage');
-            let lineageId = isLineageUrn ? itemId : null;
-            
-            if (!lineageId) {
-                // Legacy path: resolve version URN → item/lineage URN
-                if (fileId && fileId.includes('fs.file')) {
-                    try {
-                        const versionResponse = await axios.get(
-                            `https://developer.api.autodesk.com/data/v1/projects/${projectId}/versions/${encodeURIComponent(fileId)}`,
-                            { headers: { 'Authorization': `Bearer ${userToken}` } }
-                        );
-                        lineageId = versionResponse.data.data.relationships?.item?.data?.id;
-                        if (lineageId) {
-                            console.log(`[Scheduled Publish] Resolved lineage ID: ${lineageId}`);
-                        } else {
-                            console.error(`[Scheduled Publish] Version response missing item relationship - cannot build lineage ID`);
-                            console.error(`[Scheduled Publish] Version response:`, JSON.stringify(versionResponse.data?.data?.relationships));
-                            return res.status(400).json({ error: 'Could not resolve item lineage ID from version URN' });
-                        }
-                    } catch (err) {
-                        console.error(`[Scheduled Publish] Lineage resolution failed (HTTP ${err.response?.status}):`, err.response?.data || err.message);
-                        return res.status(500).json({ error: `Failed to resolve lineage ID: ${err.message}` });
-                    }
-                } else {
-                    // fileId might already be an item URN (non-fs.file format)
-                    lineageId = fileId;
-                }
-            }
-            
-            console.log(`[Scheduled Publish] Using lineage ID: ${lineageId}`);
-            
-            const payload = {
-                jsonapi: { version: '1.0' },
-                data: {
-                    type: 'commands',
-                    attributes: {
-                        extension: {
-                            type: 'commands:autodesk.bim360:C4RModelPublish',
-                            version: '1.0.0'
-                        }
-                    },
-                    relationships: {
-                        resources: {
-                            data: [{ type: 'items', id: lineageId }]
-                        }
-                    }
-                }
-            };
-            
-            let commandResponse;
-            try {
-                commandResponse = await axios.post(
-                    `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands`,
-                    payload,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${userToken}`,
-                            'Content-Type': 'application/vnd.api+json'
-                        }
-                    }
-                );
-            } catch (apsError) {
-                const apsStatus = apsError.response?.status;
-                // APS uses JSON:API error format
-                const apsDetail = apsError.response?.data?.errors?.[0]?.detail
-                    || apsError.response?.data?.detail
-                    || apsError.response?.data?.message
-                    || apsError.message;
-                console.error(`[Scheduled Publish] C4R command failed for ${fileName} - HTTP ${apsStatus}: ${apsDetail}`);
-                console.error('[Scheduled Publish] APS response body:', JSON.stringify(apsError.response?.data));
-                return res.status(apsStatus >= 400 && apsStatus < 600 ? apsStatus : 500).json({
-                    error: `C4R publish command failed (HTTP ${apsStatus}): ${apsDetail}`
-                });
-            }
-            
-            console.log(`[Scheduled Publish] ✓ C4R publish command issued for ${fileName}`);
-            
-            return res.json({
-                success: true,
-                data: {
-                    commandId: commandResponse.data.data.id,
-                    status: commandResponse.data.data.attributes.status
-                },
-                message: `Scheduled C4R publish initiated for ${fileName}`
+        // Both RCM (singleuser) and C4R (multiuser) cloud models publish the same way:
+        // resolve to the lineage URN, then issue the C4RModelPublish command directly.
+        // Scheduled publishing only ever publishes existing unpublished changes - it never
+        // opens or modifies the model - so Design Automation (and the file's Revit version)
+        // is irrelevant. This mirrors the manual publish path (routes/dataManagement.js).
+
+        // Prefer itemId when it is already a lineage URN; otherwise resolve from fileId.
+        const publishUrn = (itemId && itemId.includes('dm.lineage')) ? itemId : fileId;
+
+        let lineageId;
+        try {
+            lineageId = await resolveLineageId(projectId, publishUrn, userToken);
+        } catch (err) {
+            console.error(`[Scheduled Publish] Lineage resolution failed for ${fileName} (HTTP ${err.response?.status}):`, err.response?.data || err.message);
+            return res.status(err.response?.status || 500).json({
+                error: `Failed to resolve lineage ID: ${err.message}`
             });
         }
-        
-        // RCM path: use Design Automation WorkItem
-        console.log(`[Scheduled Publish] RCM file detected - using Design Automation WorkItem`);
-        
-        // Always use Revit 2026 (newest version, backward compatible with older files)
-        const result = await designAutomation.createWorkItem(
-            { region: region || 'US', projectGuid, modelGuid },
-            userToken,
-            callbackUrl,
-            '2026' // Safe default: 2026 can open all earlier Revit files
-        );
-        
-        console.log(`WorkItem created for scheduled publish: ${result.workItemId}`);
-        
-        // Start polling this WorkItem for status updates
-        if (global.workItemPoller) {
-            // Find the Firestore log ID for this workItem 
-            const logsSnapshot = await db.collection('publishingLogs')
-                .where('workItemId', '==', result.workItemId)
-                .limit(1)
-                .get();
-            
-            let logId = null;
-            if (!logsSnapshot.empty) {
-                logId = logsSnapshot.docs[0].id;
-            }
-            
-            global.workItemPoller.track(result.workItemId, logId, fileName);
-            console.log(`✓ WorkItem ${result.workItemId} added to poller`);
+
+        console.log(`[Scheduled Publish] Publishing ${modelType || 'cloud'} model ${fileName} (lineage ${lineageId})`);
+
+        try {
+            const { commandId, status } = await publishModel(projectId, lineageId, userToken);
+            console.log(`[Scheduled Publish] ✓ publish command issued for ${fileName} (${status})`);
+            return res.json({
+                success: true,
+                data: { commandId, status },
+                message: `Scheduled publish initiated for ${fileName}`
+            });
+        } catch (apsError) {
+            const apsStatus = apsError.response?.status;
+            // APS uses JSON:API error format
+            const apsDetail = apsError.response?.data?.errors?.[0]?.detail
+                || apsError.response?.data?.detail
+                || apsError.response?.data?.message
+                || apsError.message;
+            console.error(`[Scheduled Publish] publish command failed for ${fileName} - HTTP ${apsStatus}: ${apsDetail}`);
+            console.error('[Scheduled Publish] APS response body:', JSON.stringify(apsError.response?.data));
+            return res.status(apsStatus >= 400 && apsStatus < 600 ? apsStatus : 500).json({
+                error: `Publish command failed (HTTP ${apsStatus}): ${apsDetail}`
+            });
         }
-        
-        // Store metadata for webhook to call PublishModel when WorkItem succeeds
-        const webhookRoutes = require('./webhooks');
-        const projectIdForPublish = projectId || `b.${projectGuid}`;
-        
-        webhookRoutes.storeWorkitemMetadata(result.workItemId, {
-            shouldPublish: true,
-            projectId: projectIdForPublish,
-            itemId: fileId,
-            userToken: userToken
-        });
-        
-        console.log(`✓ Stored metadata for WorkItem ${result.workItemId} to trigger PublishModel on completion`);
-        
-        res.json({ 
-            success: true, 
-            data: result,
-            message: `Scheduled publish initiated for ${fileName}`
-        });
-        
+
     } catch (error) {
         console.error('Scheduled publish error:', error);
-        
-        // Check if error is related to missing Activity
-        if (error.response?.status === 400 || error.response?.status === 404) {
-            const errorMessage = error.response?.data?.detail || error.response?.data || error.message;
-            
-            // Check if it's an Activity not found error
-            if (typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('activity')) {
-                return next(new Error(
-                    `Activity for Revit 2026 not found. Please create Activities in Settings → Design Automation Setup.`
-                ));
-            }
-        }
-        
         next(error);
     }
 });

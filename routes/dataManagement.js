@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const authRoutes = require('./auth');
+const { resolveLineageId, publishModel } = require('../services/apsPublish');
 
 // Middleware to extract access token from session
 function getAccessToken(req, res, next) {
@@ -303,80 +304,26 @@ router.get('/projects/:projectId/folders/:folderId/rvtFiles', getAccessToken, as
 router.post('/publish/:itemId', getAccessToken, async (req, res) => {
     try {
         const { itemId } = req.params;
-        const { projectId, projectGuid, modelGuid, fileName, region } = req.body;
+        const { projectId } = req.body;
 
         if (!projectId) {
             return res.status(400).json({ error: 'projectId is required in request body' });
         }
 
-        console.log('Manual publish request:', { itemId, projectId, projectGuid, modelGuid, fileName, region });
+        console.log('Manual publish request:', { itemId, projectId });
 
-        // For single-user RCM files: Just call PublishModel API directly
-        // The files already have unpublished changes from manual edits
-        // No need for WorkItem if we're just publishing existing changes
-        console.log('✓ Publishing existing unpublished changes to create new version');
+        // Both single-user (RCM) and workshared (C4R) cloud models publish the same way:
+        // resolve to the lineage URN, then issue the C4RModelPublish command directly.
+        // The files already have unpublished changes - no Design Automation needed.
+        const lineageId = await resolveLineageId(projectId, itemId, req.accessToken);
+        console.log(`✓ Publishing existing unpublished changes (lineage ${lineageId})`);
 
-        // Extract the base URN (lineage) and detect model type
-        let lineageId = itemId;
-        let modelType = null;
-        
-        if (itemId.includes('fs.file')) {
-            const versionResponse = await axios.get(
-                `https://developer.api.autodesk.com/data/v1/projects/${projectId}/versions/${encodeURIComponent(itemId)}`,
-                {
-                    headers: { 'Authorization': `Bearer ${req.accessToken}` }
-                }
-            );
-            
-            const itemLink = versionResponse.data.data.relationships?.item?.data?.id;
-            if (itemLink) {
-                lineageId = itemLink;
-                console.log('  Resolved lineage ID:', lineageId);
-            }
-            
-            modelType = versionResponse.data.data.attributes?.extension?.data?.modelType;
-        }
-        
-        console.log(`  Model type: ${modelType || 'unknown'}`);
-        
-        // Use C4RModelPublish for all Revit cloud models (both single-user and workshared)
-        const publishCommandType = 'commands:autodesk.bim360:C4RModelPublish';
-        console.log(`✓ Using ${publishCommandType}`);
-
-        // Create PublishModel command
-        const payload = {
-            jsonapi: { version: '1.0' },
-            data: {
-                type: 'commands',
-                attributes: {
-                    extension: {
-                        type: publishCommandType,
-                        version: '1.0.0'
-                    }
-                },
-                relationships: {
-                    resources: {
-                        data: [{ type: 'items', id: lineageId }]
-                    }
-                }
-            }
-        };
-
-        const response = await axios.post(
-            `https://developer.api.autodesk.com/data/v1/projects/${projectId}/commands`,
-            payload,
-            {
-                headers: {
-                    'Authorization': `Bearer ${req.accessToken}`,
-                    'Content-Type': 'application/vnd.api+json'
-                }
-            }
-        );
+        const { commandId, status } = await publishModel(projectId, lineageId, req.accessToken);
 
         res.json({
             success: true,
-            commandId: response.data.data.id,
-            status: response.data.data.attributes.status,
+            commandId,
+            status,
             message: 'Publish command initiated'
         });
     } catch (error) {
