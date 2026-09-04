@@ -1,6 +1,7 @@
 /**
- * Cloud Functions for Scheduled Publishing and WorkItem Status Checks
- * Updated: 2026-03-16 - Using VM public IP for server communication
+ * Cloud Functions for Scheduled Publishing.
+ * Config (SERVER_URL, CLOUD_FUNCTION_AUTH_KEY, ENCRYPTION_KEY) comes from functions/.env,
+ * bundled at deploy time.
  */
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
