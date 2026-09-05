@@ -591,7 +591,20 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
         }
         
         const userData = userDoc.data();
-        
+
+        // Authoritative email-verification gate. This must live here (server-side, from the
+        // ID token's own email_verified claim) rather than only in the client SDK's cached
+        // user.emailVerified flag - a client-only check can be bypassed by calling the API
+        // directly, and admins are exempt in case their account was never routed through
+        // email verification.
+        if (!userData.isAdmin && !req.user.email_verified) {
+            return res.status(403).json({
+                success: false,
+                code: 'EMAIL_NOT_VERIFIED',
+                error: 'Please verify your email before logging in. Check your inbox for the verification link.'
+            });
+        }
+
         // Check if user has active license
         const hasActiveLicense = userData.licenseKey && 
                                  userData.licenseStatus === 'active' &&

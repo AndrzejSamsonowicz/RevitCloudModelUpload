@@ -16,9 +16,6 @@ let lockoutUntil = parseInt(localStorage.getItem('lockoutUntil') || '0') || null
 // Flag to prevent auto-redirect after manual logout
 let justLoggedOut = false;
 
-// Store email for resend verification
-let pendingVerificationEmail = null;
-
 // Initialize event listeners
 function initializeEventListeners() {
     // Purchase button
@@ -83,37 +80,36 @@ auth.onAuthStateChanged(async (user) => {
     }
     
     if (user) {
-        // Force reload user to get latest emailVerified status
+        // Force-reload the user record, then force a fresh ID token, so a just-verified
+        // email is reflected before we ask the server (otherwise a cached token minted
+        // before verification would still carry email_verified: false).
         await user.reload();
-        
-        // Check if email is verified
-        if (!user.emailVerified) {
-            showAlert('Please verify your email before logging in. Check your inbox.', 'error');
-            await auth.signOut();
-            return;
-        }
-        
+
         // Show "Already logged in" message instead of auto-redirecting
         showAlert('You are already logged in. Click Logout to sign out or wait to be redirected.', 'info');
-        
+
         // Delay redirect by 3 seconds to give user time to logout if needed
         setTimeout(async () => {
             try {
-                // Get auth token
-                const token = await user.getIdToken();
-                
-                // Validate login with server
+                const token = await user.getIdToken(true);
+
+                // Validate login with server - this is the authoritative email-verification
+                // check (it also exempts admins), not the client SDK's cached flag.
                 const response = await fetch(`${window.location.origin}/api/auth/verify`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok || !data.success) {
-                    showAlert(data.error || 'Login validation failed', 'error');
+                    if (data.code === 'EMAIL_NOT_VERIFIED') {
+                        document.getElementById('emailNotVerified').style.display = 'block';
+                    } else {
+                        showAlert(data.error || 'Login validation failed', 'error');
+                    }
                     await auth.signOut();
                     return;
                 }
@@ -165,23 +161,12 @@ async function handleLogin(e) {
     loginBtn.innerHTML = 'Logging in... <span class="loading-spinner"></span>';
     
     try {
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
-        const user = userCredential.user;
-        
-        // Force reload user to get latest emailVerified status from server
-        await user.reload();
-        
-        // Check email verification
-        if (!user.emailVerified) {
-            pendingVerificationEmail = user;
-            document.getElementById('emailNotVerified').style.display = 'block';
-            document.getElementById('alertMessage').style.display = 'none';
-            await auth.signOut();
-            loginBtn.disabled = false;
-            loginBtn.innerHTML = 'Log In';
-            return;
-        }
-        
+        await auth.signInWithEmailAndPassword(email, password);
+        // Email-verification check happens in onAuthStateChanged, against the server's
+        // authoritative /api/auth/verify (which also exempts admins) - not here, so an
+        // admin account without emailVerified set doesn't get locked out before the
+        // server ever gets a chance to weigh in.
+
         // Reset login attempts on success
         loginAttempts = 0;
         lockoutUntil = null;
