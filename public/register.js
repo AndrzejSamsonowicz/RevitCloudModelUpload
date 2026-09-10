@@ -52,7 +52,7 @@ function initializeRegistrationForm() {
             
             if (hasLength && hasUpper && hasLower && hasNumber) {
                 requirements.className = 'password-requirements valid';
-                requirements.textContent = '✓ Password meets requirements';
+                requirements.textContent = 'Password meets requirements';
             } else {
                 requirements.className = 'password-requirements invalid';
                 requirements.textContent = 'Must be at least 8 characters with uppercase, lowercase, and number';
@@ -164,7 +164,7 @@ async function handleRegistration(e) {
             console.log('Analytics logging failed (non-critical):', analyticsError);
         }
         
-        const successMessage = '✅ Account created successfully! Please check your email to verify your account. Redirecting to login...';
+        const successMessage = 'Account created successfully! Please check your email to verify your account. Redirecting to login...';
         showAlert(successMessage, 'success');
         
         // Disable form

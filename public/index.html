@@ -5,15 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Revit Cloud Model Publisher</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Artifact+Elements:wght@400;700&display=swap');
+
         * {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Artifact Elements', Arial, sans-serif;
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Artifact Elements', Arial, sans-serif;
             background: white;
             min-height: 100vh;
         }
@@ -27,36 +29,30 @@
             border-radius: 5px !important;
             cursor: pointer !important;
             font-size: 14px !important;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important;
+            font-family: 'Artifact Elements', Arial, sans-serif !important;
             font-weight: 400 !important;
-            min-width: 120px !important;
-            height: 32px !important;
+            min-width: 200px !important;
+            height: 44px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             transition: background-color 0.2s ease !important;
             margin: 4px !important;
         }
-        
+
         button:hover, .btn:hover {
             background-color: #0580C0 !important;
         }
-        
+
         button:active, .btn:active {
             background-color: #046BA5 !important;
         }
 
-        button:disabled {
-            background-color: #ccc !important;
+        button:disabled, .btn:disabled {
+            background-color: #e0e0e0 !important;
+            color: #999 !important;
             cursor: not-allowed !important;
-        }
-
-        button.secondary {
-            background-color: #6c757d !important;
-        }
-
-        button.secondary:hover {
-            background-color: #5a6268 !important;
+            opacity: 0.7;
         }
 
         .hidden {
@@ -635,7 +631,7 @@
                     <!-- Permissions Information -->
                     <div style="margin-bottom: 15px; padding: 10px 12px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-left: 3px solid #0696D7; border-radius: 4px; flex-shrink: 0;">
                         <div style="font-size: 13px; color: #0077B6;">
-                            <strong>ℹ️ Note:</strong> You need at least Edit permissions to publish Revit files.
+                            <strong>Note:</strong> You need at least Edit permissions to publish Revit files.
                         </div>
                     </div>
                     
@@ -654,8 +650,8 @@
 
                     <div id="publishingActions" style="flex-shrink: 0; display: none;">
                         <button id="publishNowBtn">Publish Selected Files Now</button>
-                        <button id="saveSchedulesBtn" style="margin-left: 10px; background-color: #28a745;">Save Publishing Schedules</button>
-                        <button id="showHistoryBtn" style="margin-left: 10px; background-color: #6c757d;">See Publishing History</button>
+                        <button id="saveSchedulesBtn" style="margin-left: 10px;">Save Publishing Schedules</button>
+                        <button id="showHistoryBtn" style="margin-left: 10px;">See Publishing History</button>
                     </div>
                 </div>
             </div>
@@ -778,7 +774,7 @@
                 <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-shrink: 0;">
                     <button id="refreshHistoryBtn" style="min-width: 150px;">Refresh History</button>
                     <button id="downloadReportBtn" style="min-width: 150px; background-color: #0696D7 !important;">Download Report</button>
-                    <button id="clearHistoryBtn" style="min-width: 150px; background-color: #dc3545 !important;">Clear History</button>
+                    <button id="clearHistoryBtn" style="min-width: 150px;">Clear History</button>
                     <span id="historyCount" style="color: #666; margin-left: auto;">0 records</span>
                 </div>
                 <div id="publishingHistoryContent" style="flex: 1; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 15px; background: #f8f9fa;">

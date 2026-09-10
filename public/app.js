@@ -463,7 +463,7 @@ function showAccessBanner(u) {
         const left = days > 1 ? `${days} days` : (hours > 1 ? `${hours} hours` : 'less than 1 hour');
         bg = ms > 0 ? '#ff9800' : '#dc3545';
         html = ms > 0
-            ? `🎉 <strong>Free trial:</strong> ${left} remaining — <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`
+            ? `<strong>Free trial:</strong> ${left} remaining — <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`
             : `<strong>Trial expired.</strong> <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`;
     } else if (u.licenseExpiry) {
         const days = Math.ceil((new Date(u.licenseExpiry) - new Date()) / 86400000);
