@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+const { isAdmin } = require('../services/adminCheck');
 
 // Helper function to access Firebase services (initialized in server.js)
 const getDb = () => admin.firestore();
@@ -227,8 +228,7 @@ router.post('/validate-license', async (req, res) => {
 router.post('/admin/activate-license', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -295,8 +295,7 @@ router.post('/admin/activate-license', verifyFirebaseToken, async (req, res) => 
 router.post('/admin/deactivate-license', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -337,8 +336,7 @@ router.post('/admin/deactivate-license', verifyFirebaseToken, async (req, res) =
 router.get('/admin/licenses', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -376,14 +374,17 @@ router.get('/admin/licenses', verifyFirebaseToken, async (req, res) => {
 router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
         // Don't use orderBy to avoid Firestore requirement that ALL docs must have the field
         const usersSnapshot = await getDb().collection('users').get();
-        
+
+        // Admin status lives in the admins/{uid} collection (doc exists = admin).
+        const adminsSnapshot = await getDb().collection('admins').get();
+        const adminUids = new Set(adminsSnapshot.docs.map(d => d.id));
+
         const users = [];
         usersSnapshot.forEach(doc => {
             const data = doc.data();
@@ -409,7 +410,7 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
                 licenseKey: data.licenseKey || null,
                 licenseStatus: data.licenseStatus || 'none',
                 licenseExpiry: data.licenseExpiry || null,
-                isAdmin: data.isAdmin || false,
+                isAdmin: adminUids.has(doc.id),
                 createdAt,
                 lastLogin
             });
@@ -441,8 +442,7 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
 router.delete('/admin/users/:userId', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -482,8 +482,7 @@ router.delete('/admin/users/:userId', verifyFirebaseToken, async (req, res) => {
 router.post('/admin/delete-users', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -554,8 +553,7 @@ router.post('/admin/delete-users', verifyFirebaseToken, async (req, res) => {
 router.post('/admin/verify-email', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -601,8 +599,7 @@ router.post('/admin/verify-email', verifyFirebaseToken, async (req, res) => {
 router.post('/admin/reset-password', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         
@@ -652,8 +649,7 @@ router.post('/admin/reset-password', verifyFirebaseToken, async (req, res) => {
 router.get('/admin/analytics', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
         

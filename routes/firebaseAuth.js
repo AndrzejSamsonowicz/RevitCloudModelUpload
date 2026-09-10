@@ -8,6 +8,7 @@ const router = express.Router();
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 const emailService = require('../services/emailService');
+const { isAdmin } = require('../services/adminCheck');
 
 // Helper functions to access Firebase services (initialized in server.js)
 const getDb = () => admin.firestore();
@@ -225,21 +226,12 @@ async function verifyAdminAccess(req, res, next) {
         req.user = decodedToken;
         req.userId = decodedToken.uid;
         
-        // Check if user is admin in Firestore
-        const userDoc = await getDb().collection('users').doc(req.userId).get();
-        
-        if (!userDoc.exists) {
-            console.log('[Admin Middleware] User document not found');
-            return res.status(403).json({ error: 'Forbidden: User not found' });
-        }
-        
-        const userData = userDoc.data();
-        
-        if (!userData.isAdmin) {
+        // Admin = a doc exists at admins/{uid} (see services/adminCheck.js)
+        if (!(await isAdmin(req.userId))) {
             console.log(`[Admin Middleware] Access denied for user: ${req.userId}`);
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
-        
+
         console.log(`[Admin Middleware] Admin access granted for user: ${req.userId}`);
         next();
     } catch (error) {
@@ -591,13 +583,14 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
         }
         
         const userData = userDoc.data();
+        const adminFlag = await isAdmin(req.userId);
 
         // Authoritative email-verification gate. This must live here (server-side, from the
         // ID token's own email_verified claim) rather than only in the client SDK's cached
         // user.emailVerified flag - a client-only check can be bypassed by calling the API
         // directly, and admins are exempt in case their account was never routed through
         // email verification.
-        if (!userData.isAdmin && !req.user.email_verified) {
+        if (!adminFlag && !req.user.email_verified) {
             return res.status(403).json({
                 success: false,
                 code: 'EMAIL_NOT_VERIFIED',
@@ -606,11 +599,11 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
         }
 
         // Check if user has active license
-        const hasActiveLicense = userData.licenseKey && 
+        const hasActiveLicense = userData.licenseKey &&
                                  userData.licenseStatus === 'active' &&
-                                 userData.licenseExpiry && 
+                                 userData.licenseExpiry &&
                                  new Date(userData.licenseExpiry) > new Date();
-        
+
         res.json({
             success: true,
             user: {
@@ -619,7 +612,7 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
                 hasActiveLicense: hasActiveLicense,
                 licenseStatus: userData.licenseStatus || 'none',
                 licenseExpiry: userData.licenseExpiry || null,
-                isAdmin: userData.isAdmin || false,
+                isAdmin: adminFlag,
                 createdAt: userData.createdAt
             }
         });
@@ -738,19 +731,18 @@ router.get('/user/credentials', verifyFirebaseToken, async (req, res) => {
 router.get('/user/:userId', verifyFirebaseToken, async (req, res) => {
     try {
         // Check if requester is admin
-        const adminDoc = await getDb().collection('users').doc(req.userId).get();
-        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Forbidden: Admin access required' });
         }
-        
+
         const userDoc = await getDb().collection('users').doc(req.params.userId).get();
-        
+
         if (!userDoc.exists) {
             return res.status(404).json({ error: 'User not found' });
         }
-        
+
         const userData = userDoc.data();
-        
+
         res.json({
             success: true,
             user: {
@@ -759,7 +751,7 @@ router.get('/user/:userId', verifyFirebaseToken, async (req, res) => {
                 licenseKey: userData.licenseKey,
                 licenseStatus: userData.licenseStatus,
                 licenseExpiry: userData.licenseExpiry,
-                isAdmin: userData.isAdmin || false,
+                isAdmin: await isAdmin(req.params.userId),
                 createdAt: userData.createdAt,
                 lastLogin: userData.lastLogin
             }

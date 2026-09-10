@@ -19,10 +19,10 @@ auth.onAuthStateChanged(async (user) => {
     }
     
     try {
-        // Check if user is admin in Firestore users collection
-        const userDoc = await db.collection('users').doc(user.uid).get();
-        
-        if (!userDoc.exists || !userDoc.data().isAdmin) {
+        // Admin = a doc exists at admins/{uid}
+        const adminDoc = await db.collection('admins').doc(user.uid).get();
+
+        if (!adminDoc.exists) {
             // User is authenticated but NOT an admin - deny access
             console.warn('Access denied: User is not an admin');
             await auth.signOut();

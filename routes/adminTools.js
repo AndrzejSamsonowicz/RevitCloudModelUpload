@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const admin = require('firebase-admin');
 const { verifyFirebaseToken } = require('./firebaseAuth');
+const { isAdmin } = require('../services/adminCheck');
 
 /**
  * POST /api/admin/fix-user-emails
@@ -14,9 +15,8 @@ const { verifyFirebaseToken } = require('./firebaseAuth');
  */
 router.post('/fix-user-emails', verifyFirebaseToken, async (req, res) => {
     try {
-        // Check if user is admin
-        const userDoc = await admin.firestore().collection('users').doc(req.userId).get();
-        if (!userDoc.exists || !userDoc.data().isAdmin) {
+        // Check if user is admin (admins/{uid} doc exists)
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
@@ -93,9 +93,8 @@ router.post('/fix-user-emails', verifyFirebaseToken, async (req, res) => {
  */
 router.get('/check-user-emails', verifyFirebaseToken, async (req, res) => {
     try {
-        // Check if user is admin
-        const userDoc = await admin.firestore().collection('users').doc(req.userId).get();
-        if (!userDoc.exists || !userDoc.data().isAdmin) {
+        // Check if user is admin (admins/{uid} doc exists)
+        if (!(await isAdmin(req.userId))) {
             return res.status(403).json({ error: 'Admin access required' });
         }
 
