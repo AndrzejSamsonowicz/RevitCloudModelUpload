@@ -93,9 +93,11 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: [
-                "'self'", 
-                "https://www.gstatic.com", 
-                "https://apis.google.com"
+                "'self'",
+                "https://www.gstatic.com",
+                "https://apis.google.com",
+                "https://www.google.com",      // reCAPTCHA v3 (App Check)
+                "https://www.recaptcha.net"    // reCAPTCHA v3 (App Check)
             ],
             styleSrc: [
                 "'self'", 
@@ -104,18 +106,25 @@ app.use(helmet({
             ],
             imgSrc: ["'self'", "data:", "https:"],
             connectSrc: [
-                "'self'", 
+                "'self'",
                 "https://www.gstatic.com", // Firebase source maps
                 "https://developer.api.autodesk.com",
                 "https://firebasestorage.googleapis.com",
                 "https://firestore.googleapis.com",
                 "https://identitytoolkit.googleapis.com",
                 "https://securetoken.googleapis.com",
-                "https://*.firebaseio.com"
+                "https://*.firebaseio.com",
+                "https://firebaseappcheck.googleapis.com", // App Check token exchange
+                "https://www.google.com",      // reCAPTCHA v3
+                "https://www.recaptcha.net"    // reCAPTCHA v3
             ],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
             objectSrc: ["'none'"],
-            frameSrc: ["https://www.youtube.com"], // For video modals
+            frameSrc: [
+                "https://www.youtube.com", // For video modals
+                "https://www.google.com",      // reCAPTCHA v3 invisible iframe
+                "https://www.recaptcha.net"    // reCAPTCHA v3 invisible iframe
+            ],
             upgradeInsecureRequests: [] // Upgrade HTTP requests to HTTPS
         }
     },
