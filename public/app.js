@@ -431,8 +431,10 @@ function initializeEventListeners() {
     // Filter inputs
     const hubFilter = document.getElementById('hubFilter');
     const projectFilter = document.getElementById('projectFilter');
+    const fileFilter = document.getElementById('fileFilter');
     if (hubFilter) hubFilter.addEventListener('input', filterHubs);
     if (projectFilter) projectFilter.addEventListener('input', filterProjects);
+    if (fileFilter) fileFilter.addEventListener('input', applyFileFilter);
     
     console.log('Event listeners initialized');
 }
@@ -1816,7 +1818,7 @@ function displayRevitFiles(files) {
         updateFileSelection();
         
         // Show publishing action buttons after files are loaded
-        document.getElementById('publishingActions').style.display = 'block';
+        document.getElementById('publishingActions').style.display = 'flex';
         
         hideLoadingModal();
     }).catch(error => {
@@ -1831,7 +1833,7 @@ function displayRevitFiles(files) {
         
         renderFilesList();
         updateFileSelection();
-        document.getElementById('publishingActions').style.display = 'block';
+        document.getElementById('publishingActions').style.display = 'flex';
         hideLoadingModal();
     });
 }
@@ -1873,7 +1875,7 @@ async function loadRevitFiles(projectId, folderId) {
             updateFileSelection();
             
             // Show publishing action buttons after files are loaded
-            document.getElementById('publishingActions').style.display = 'block';
+            document.getElementById('publishingActions').style.display = 'flex';
             
             hideLoadingModal();
         } else {
@@ -1940,16 +1942,64 @@ function sortFiles(column) {
     renderFilesList();
 }
 
+// Hide table rows whose file name doesn't match the "Filter files by name" input.
+function applyFileFilter() {
+    const q = (document.getElementById('fileFilter')?.value || '').toLowerCase().trim();
+    document.querySelectorAll('#rvtFilesList tbody tr').forEach(tr => {
+        const name = (tr.dataset.fileName || '').toLowerCase();
+        tr.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+}
+
+// Persisted column widths for the Revit Cloud Models table (survive re-render/sort).
+const FILE_COL_DEFAULT_WIDTH = {
+    checkbox: 36, name: 260, version: 70, fileType: 90, path: 150,
+    date: 150, timeSince: 140, publishedBy: 160, publishTime: 340
+};
+const fileColWidths = {};
+
+// Add a drag-to-resize grip to a <th>; updates that column's width and the table width.
+function makeThResizable(th, key, table) {
+    th.style.position = 'relative';
+    const grip = document.createElement('div');
+    grip.className = 'th-resizer';
+    grip.addEventListener('click', e => e.stopPropagation()); // don't trigger sort
+    grip.addEventListener('mousedown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.pageX;
+        const startW = th.getBoundingClientRect().width;
+        const startTableW = table.getBoundingClientRect().width;
+        const onMove = ev => {
+            const w = Math.max(50, Math.round(startW + (ev.pageX - startX)));
+            th.style.width = w + 'px';
+            table.style.width = Math.round(startTableW + (w - startW)) + 'px';
+            fileColWidths[key] = w;
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.body.style.cursor = 'col-resize';
+    });
+    th.appendChild(grip);
+}
+
 function renderFilesList() {
     const filesList = document.getElementById('rvtFilesList');
     filesList.innerHTML = '';
-    
+
+    const w = key => (fileColWidths[key] || FILE_COL_DEFAULT_WIDTH[key]);
+
     // Create table
     const table = document.createElement('table');
-    table.style.width = 'auto';
     table.style.borderCollapse = 'collapse';
-    table.style.tableLayout = 'auto';
+    table.style.tableLayout = 'fixed';
     table.style.fontSize = '13px';
+    table.style.width = Object.keys(FILE_COL_DEFAULT_WIDTH).reduce((s, k) => s + w(k), 0) + 'px';
     
     // Sort indicators
     const getSortIndicator = (column) => {
@@ -2086,6 +2136,25 @@ function renderFilesList() {
     thPublishTime.style.whiteSpace = 'nowrap';
     thPublishTime.textContent = 'Publishing Time';
     
+    // Fixed column widths (persisted) + drag-to-resize grips on the data columns.
+    thName.style.maxWidth = ''; // was 33vw — fixed layout drives width now
+    const cols = [
+        [thCheckbox, 'checkbox', false],
+        [thName, 'name', true],
+        [thVersion, 'version', true],
+        [thFileType, 'fileType', true],
+        [thPath, 'path', true],
+        [thDate, 'date', true],
+        [thTimeSince, 'timeSince', true],
+        [thPublishedBy, 'publishedBy', true],
+        [thPublishTime, 'publishTime', false]
+    ];
+    cols.forEach(([th, key, resizable]) => {
+        th.style.width = w(key) + 'px';
+        th.style.overflow = 'hidden';
+        if (resizable) makeThResizable(th, key, table);
+    });
+
     headerRow.appendChild(thCheckbox);
     headerRow.appendChild(thName);
     headerRow.appendChild(thVersion);
@@ -2363,7 +2432,10 @@ function renderFilesList() {
     
     table.appendChild(tbody);
     filesList.appendChild(table);
-    
+
+    // Re-apply the name filter (rows were just rebuilt)
+    applyFileFilter();
+
     // Set up auto-refresh of time since publish (every 60 seconds)
     if (timeSincePublishInterval) {
         clearInterval(timeSincePublishInterval);
