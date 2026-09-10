@@ -374,19 +374,15 @@ function initializeEventListeners() {
     const licenseLogoutBtn = document.getElementById('licenseLogoutBtn');
     const headerLogoutBtn = document.getElementById('headerLogoutBtn');
     const settingsBtn = document.getElementById('settingsBtn');
-    const settingsBtn2 = document.getElementById('settingsBtn2');
     const loginBtn = document.getElementById('loginBtn');
-    const autodeskLoginBtn = document.getElementById('autodeskLoginBtn');
-    
+
     if (loginScreenLogoutBtn) loginScreenLogoutBtn.addEventListener('click', logout);
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
     if (logoutBtn2) logoutBtn2.addEventListener('click', logout);
     if (licenseLogoutBtn) licenseLogoutBtn.addEventListener('click', handleLogout);
     if (headerLogoutBtn) headerLogoutBtn.addEventListener('click', handleLogout);
     if (settingsBtn) settingsBtn.addEventListener('click', showCredentialsModal);
-    if (settingsBtn2) settingsBtn2.addEventListener('click', showCredentialsModal);
     if (loginBtn) loginBtn.addEventListener('click', login);
-    if (autodeskLoginBtn) autodeskLoginBtn.addEventListener('click', login);
     
     // File selection buttons
     const selectAllBtn = document.getElementById('selectAllBtn');
@@ -527,21 +523,18 @@ window.addEventListener('DOMContentLoaded', async () => {
                         updateAuthUI(true);
                         // Note: Auto-upload removed - Activities are created automatically during publish workflow
                     } else {
-                        // Firebase authenticated but OAuth session invalid
+                        // Firebase authenticated but OAuth session invalid -> show the card
                         sessionStorage.removeItem('aps_session');
                         sessionId = null;
                         document.body.style.visibility = 'visible';
-                        updateAuthUI(true);
-                        await loadHubs(); // This will show "Login with Autodesk" button
+                        updateAuthUI(false);
                     }
                     // Clean URL
                     window.history.replaceState({}, document.title, '/');
                 } else {
-                    // Firebase authenticated but no OAuth session
-                    // Show app and let user authenticate with Autodesk when needed
+                    // Firebase authenticated but no OAuth session -> show the card
                     document.body.style.visibility = 'visible';
-                    updateAuthUI(true);
-                    await loadHubs(); // This will show "Login with Autodesk" button
+                    updateAuthUI(false);
                 }
             } else {
                 // Not authenticated with Firebase, redirect to login
@@ -671,43 +664,21 @@ async function checkSession() {
     }
 }
 
+// authenticated === true means a valid Autodesk (APS) session exists.
+// true  -> show the app (#content), which has a single Logout button.
+// false -> show the pre-login card (#loginScreen): Logout / Settings / Login with Autodesk.
 function updateAuthUI(authenticated) {
-    const loginBtn = document.getElementById('loginBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const settingsBtn = document.getElementById('settingsBtn');
-    const settingsBtn2 = document.getElementById('settingsBtn2');
-    const autodeskLoginBtn = document.getElementById('autodeskLoginBtn');
     const loginScreen = document.getElementById('loginScreen');
     const contentDiv = document.getElementById('content');
     const errorDiv = document.getElementById('error');
 
     if (authenticated) {
-        // Hide login screen, show main content
         if (loginScreen) loginScreen.style.display = 'none';
         if (contentDiv) contentDiv.style.display = 'block';
-        if(loginBtn) loginBtn.classList.add('hidden');
-        if (settingsBtn) settingsBtn.classList.add('hidden');
-        if (logoutBtn) logoutBtn.classList.remove('hidden');
-        if (settingsBtn2) settingsBtn2.classList.remove('hidden');
         if (errorDiv) errorDiv.style.display = 'none';
-        
-        // Show/hide Autodesk login button based on session
-        if (autodeskLoginBtn) {
-            if (sessionId) {
-                autodeskLoginBtn.classList.add('hidden');
-            } else {
-                autodeskLoginBtn.classList.remove('hidden');
-            }
-        }
     } else {
-        // Show login screen, hide main content
-        if (loginScreen) loginScreen.style.display = 'block';
+        if (loginScreen) loginScreen.style.display = 'flex';
         if (contentDiv) contentDiv.style.display = 'none';
-        if (loginBtn) loginBtn.classList.remove('hidden');
-        if (settingsBtn) settingsBtn.classList.remove('hidden');
-        if (logoutBtn) logoutBtn.classList.add('hidden');
-        if (settingsBtn2) settingsBtn2.classList.add('hidden');
-        if (autodeskLoginBtn) autodeskLoginBtn.classList.add('hidden');
     }
 }
 
