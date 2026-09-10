@@ -447,7 +447,7 @@ function showAccessBanner(u) {
         banner = document.createElement('div');
         banner.id = 'access-info-banner';
         banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;padding:8px 16px;'
-            + 'text-align:center;font-size:14px;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+            + 'text-align:center;font-size:13px;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);';
         document.body.insertBefore(banner, document.body.firstChild);
     }
     let html = '';
@@ -468,12 +468,15 @@ function showAccessBanner(u) {
         html = `<strong>License:</strong> valid until ${new Date(u.licenseExpiry).toLocaleDateString()} (${days} day(s) left)`;
     } else {
         banner.style.display = 'none';
+        document.documentElement.style.setProperty('--banner-h', '0px');
         return;
     }
     banner.style.display = 'block';
     banner.style.background = bg;
     banner.innerHTML = html;
-    document.body.style.paddingTop = banner.offsetHeight + 'px';
+    // Reserve space via a CSS var consumed by #content (not body padding — the
+    // app column is height:100vh and body padding would push its bottom off-screen).
+    document.documentElement.style.setProperty('--banner-h', banner.offsetHeight + 'px');
 }
 
 // Check for session on page load
