@@ -1428,6 +1428,11 @@ async function selectHub(hubId, hubName, region) {
         
         const data = await response.json();
         if (response.ok) {
+            // Keep only real ACC/BIM 360 projects — the Data Management hub endpoint
+            // also returns auto-generated containers (e.g. "Component Library Project
+            // <guid>") and legacy non-BIM360 containers. (Forma uses the ACC Admin API,
+            // which never returns these; this is the equivalent filter on this endpoint.)
+            data.data = (data.data || []).filter(isRealProject);
             originalProjectsData = data;
             displayProjects(data);
             showMessage('publishMessage', `Found ${data.data.length} projects in ${hubName}`, 'success');
@@ -1446,6 +1451,18 @@ async function selectHub(hubId, hubName, region) {
         projectsList.appendChild(errorDiv);
         showMessage('publishMessage', `Failed to load projects: ${error.message}`, 'error');
     }
+}
+
+// A "real" project vs. an ACC/BIM360 auto-generated container.
+function isRealProject(project) {
+    const name = project?.attributes?.name || '';
+    const type = project?.attributes?.extension?.type;
+    // ACC auto-creates one of these per account for the component/family library.
+    if (/^Component Library Project\b/i.test(name)) return false;
+    // Real ACC/BIM 360 projects are projects:autodesk.bim360:Project; other types
+    // (projects:autodesk.core:Project etc.) are legacy/non-BIM360 containers.
+    if (type && type !== 'projects:autodesk.bim360:Project') return false;
+    return true;
 }
 
 function displayProjects(projectsData) {
