@@ -456,6 +456,21 @@ window.addEventListener('DOMContentLoaded', async () => {
                 // User is authenticated with Firebase
                 console.log('Firebase user authenticated:', user.email);
                 userId = user.uid;
+
+                // Enforce access: admin OR active license OR active 3-day trial.
+                try {
+                    const idToken = await user.getIdToken();
+                    const vr = await fetch('/api/auth/verify', { headers: { 'Authorization': `Bearer ${idToken}` } });
+                    const vd = await vr.json().catch(() => ({}));
+                    if (!vr.ok || !vd.success) {
+                        window.location.href = vd.redirectTo || '/login';
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Access check failed:', e);
+                    window.location.href = '/login';
+                    return;
+                }
                 
                 // Check for Autodesk OAuth session
                 sessionId = hashParams.get('session') || params.get('session');

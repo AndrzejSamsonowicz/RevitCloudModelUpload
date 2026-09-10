@@ -267,12 +267,15 @@ router.post('/admin/activate-license', verifyFirebaseToken, async (req, res) => 
             paypalOrderId: 'ADMIN-ACTIVATED'
         });
         
-        // Update user
+        // Update user - a real license supersedes any trial
         await getDb().collection('users').doc(userId).update({
             licenseKey,
             licenseStatus: 'active',
             licenseExpiry: expiryDate.toISOString(),
-            licenseActivatedAt: admin.firestore.FieldValue.serverTimestamp()
+            licenseActivatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            isTrial: false,
+            trialEndDate: null,
+            hasActiveAccess: true
         });
         
         res.json({

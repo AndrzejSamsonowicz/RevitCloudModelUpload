@@ -270,7 +270,11 @@ router.post('/register', async (req, res) => {
         // Generate verification token
         const verificationToken = crypto.randomBytes(32).toString('hex');
         
-        // Create user document in Firestore
+        // Create user document in Firestore.
+        // New accounts without a license key get a 3-day trial (same model as
+        // ACC_User_Management / forma-user-management).
+        const now = new Date();
+        const trialEndDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
         await getDb().collection('users').doc(userRecord.uid).set({
             email: emailValidation.value,
             licenseKey: licenseKey || null,
@@ -282,7 +286,13 @@ router.post('/register', async (req, res) => {
             lastLogin: null,
             encryptedClientId: '',
             encryptedClientSecret: '',
-            encryptionIV: ''
+            encryptionIV: '',
+            // Trial period
+            isTrial: licenseKey ? false : true,
+            trialStartDate: licenseKey ? null : admin.firestore.Timestamp.fromDate(now),
+            trialEndDate: licenseKey ? null : admin.firestore.Timestamp.fromDate(trialEndDate),
+            trialUsed: true,
+            hasActiveAccess: true
         });
         
         // Send verification email
@@ -598,11 +608,33 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
             });
         }
 
-        // Check if user has active license
+        const now = new Date();
+
+        // Active license?
         const hasActiveLicense = userData.licenseKey &&
                                  userData.licenseStatus === 'active' &&
                                  userData.licenseExpiry &&
-                                 new Date(userData.licenseExpiry) > new Date();
+                                 new Date(userData.licenseExpiry) > now;
+
+        // Active 3-day trial? (trialEndDate is a Firestore Timestamp)
+        const trialEndDate = userData.trialEndDate && typeof userData.trialEndDate.toDate === 'function'
+            ? userData.trialEndDate.toDate()
+            : (userData.trialEndDate ? new Date(userData.trialEndDate) : null);
+        const hasActiveTrial = !!userData.isTrial && trialEndDate && trialEndDate > now;
+
+        // Access gate: admin OR license OR trial. Same rule as ACC_User_Management.
+        const hasActiveAccess = adminFlag || hasActiveLicense || hasActiveTrial;
+
+        if (!hasActiveAccess) {
+            return res.status(403).json({
+                success: false,
+                code: 'NO_ACTIVE_ACCESS',
+                error: userData.isTrial
+                    ? 'Your 3-day trial has expired. Please purchase a license to continue.'
+                    : 'No active license. Please purchase a license to continue.',
+                redirectTo: '/purchase'
+            });
+        }
 
         res.json({
             success: true,
@@ -612,6 +644,10 @@ router.get('/verify', verifyFirebaseToken, async (req, res) => {
                 hasActiveLicense: hasActiveLicense,
                 licenseStatus: userData.licenseStatus || 'none',
                 licenseExpiry: userData.licenseExpiry || null,
+                isTrial: !!userData.isTrial,
+                trialEndDate: trialEndDate ? trialEndDate.toISOString() : null,
+                hasActiveTrial: hasActiveTrial,
+                hasActiveAccess: hasActiveAccess,
                 isAdmin: adminFlag,
                 createdAt: userData.createdAt
             }

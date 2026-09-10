@@ -126,6 +126,10 @@ async function handleRegistration(e) {
         await user.sendEmailVerification(actionCodeSettings);
         
         // Step 4: Create user document in Firestore
+        // New accounts without a license key get a 3-day trial (same model as
+        // ACC_User_Management / forma-user-management).
+        const nowDate = new Date();
+        const trialEndDate = new Date(nowDate.getTime() + 3 * 24 * 60 * 60 * 1000);
         await db.collection('users').doc(user.uid).set({
             email: email,
             licenseKey: licenseKey || null,
@@ -136,7 +140,13 @@ async function handleRegistration(e) {
             lastLogin: null,
             encryptedClientId: '',
             encryptedClientSecret: '',
-            encryptionIV: ''
+            encryptionIV: '',
+            // Trial period
+            isTrial: licenseKey ? false : true,
+            trialStartDate: licenseKey ? null : firebase.firestore.Timestamp.fromDate(nowDate),
+            trialEndDate: licenseKey ? null : firebase.firestore.Timestamp.fromDate(trialEndDate),
+            trialUsed: true,
+            hasActiveAccess: true
         });
         
         // Step 5: Log analytics (non-blocking - don't fail registration if this fails)

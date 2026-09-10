@@ -105,10 +105,15 @@ auth.onAuthStateChanged(async (user) => {
                 if (!response.ok || !data.success) {
                     if (data.code === 'EMAIL_NOT_VERIFIED') {
                         document.getElementById('emailNotVerified').style.display = 'block';
+                        await auth.signOut();
+                    } else if (data.redirectTo) {
+                        // e.g. trial/license expired -> send to purchase, stay signed in
+                        showAlert(data.error || 'Access unavailable', 'info');
+                        setTimeout(() => { window.location.href = data.redirectTo; }, 1500);
                     } else {
                         showAlert(data.error || 'Login validation failed', 'error');
+                        await auth.signOut();
                     }
-                    await auth.signOut();
                     return;
                 }
                 
