@@ -114,9 +114,10 @@ app.use(helmet({
                 "https://identitytoolkit.googleapis.com",
                 "https://securetoken.googleapis.com",
                 "https://*.firebaseio.com",
-                "https://firebaseappcheck.googleapis.com", // App Check token exchange
-                "https://www.google.com",      // reCAPTCHA v3
-                "https://www.recaptcha.net"    // reCAPTCHA v3
+                "https://firebaseappcheck.googleapis.com",         // App Check
+                "https://content-firebaseappcheck.googleapis.com", // App Check token exchange (reCAPTCHA Enterprise)
+                "https://www.google.com",      // reCAPTCHA
+                "https://www.recaptcha.net"    // reCAPTCHA
             ],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
             objectSrc: ["'none'"],
