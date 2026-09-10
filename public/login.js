@@ -85,11 +85,9 @@ auth.onAuthStateChanged(async (user) => {
         // before verification would still carry email_verified: false).
         await user.reload();
 
-        // Show "Already logged in" message instead of auto-redirecting
-        showAlert('You are already logged in. Click Logout to sign out or wait to be redirected.', 'info');
-
-        // Delay redirect by 3 seconds to give user time to logout if needed
-        setTimeout(async () => {
+        // Already-authenticated visitor to /login: validate with the server and redirect
+        // straight to the app (no interstitial message, no artificial delay).
+        (async () => {
             try {
                 const token = await user.getIdToken(true);
 
@@ -135,7 +133,7 @@ auth.onAuthStateChanged(async (user) => {
                 showAlert('Error validating login. Please try again.', 'error');
                 await auth.signOut();
             }
-        }, 3000); // 3 second delay
+        })();
     }
 });
 
