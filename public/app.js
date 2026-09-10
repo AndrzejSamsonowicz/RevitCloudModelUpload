@@ -441,6 +441,43 @@ function initializeEventListeners() {
     console.log('Event listeners initialized');
 }
 
+// Fixed top banner showing admin / trial / license status (from /api/auth/verify).
+function showAccessBanner(u) {
+    if (!u) return;
+    let banner = document.getElementById('access-info-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'access-info-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;padding:8px 16px;'
+            + 'text-align:center;font-size:14px;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+        document.body.insertBefore(banner, document.body.firstChild);
+    }
+    let html = '';
+    let bg = '#0696D7';
+    if (u.isAdmin) {
+        html = `<strong>Admin Account:</strong> ${u.email}`;
+    } else if (u.isTrial && u.trialEndDate) {
+        const ms = new Date(u.trialEndDate) - new Date();
+        const days = Math.ceil(ms / 86400000);
+        const hours = Math.ceil(ms / 3600000);
+        const left = days > 1 ? `${days} days` : (hours > 1 ? `${hours} hours` : 'less than 1 hour');
+        bg = ms > 0 ? '#ff9800' : '#dc3545';
+        html = ms > 0
+            ? `🎉 <strong>Free trial:</strong> ${left} remaining — <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`
+            : `<strong>Trial expired.</strong> <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`;
+    } else if (u.licenseExpiry) {
+        const days = Math.ceil((new Date(u.licenseExpiry) - new Date()) / 86400000);
+        html = `<strong>License:</strong> valid until ${new Date(u.licenseExpiry).toLocaleDateString()} (${days} day(s) left)`;
+    } else {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = 'block';
+    banner.style.background = bg;
+    banner.innerHTML = html;
+    document.body.style.paddingTop = banner.offsetHeight + 'px';
+}
+
 // Check for session on page load
 window.addEventListener('DOMContentLoaded', async () => {
     // Initialize event listeners
@@ -466,6 +503,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                         window.location.href = vd.redirectTo || '/login';
                         return;
                     }
+                    showAccessBanner(vd.user);
                 } catch (e) {
                     console.error('Access check failed:', e);
                     window.location.href = '/login';

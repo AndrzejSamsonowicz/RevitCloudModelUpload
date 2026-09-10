@@ -407,12 +407,18 @@ router.get('/admin/users', verifyFirebaseToken, async (req, res) => {
                     : data.lastLogin;
             }
             
+            const trialEndDate = data.trialEndDate && typeof data.trialEndDate.toDate === 'function'
+                ? data.trialEndDate.toDate().toISOString()
+                : (data.trialEndDate || null);
+
             users.push({
                 userId: doc.id,
                 email: data.email,
                 licenseKey: data.licenseKey || null,
                 licenseStatus: data.licenseStatus || 'none',
                 licenseExpiry: data.licenseExpiry || null,
+                isTrial: data.isTrial || false,
+                trialEndDate: trialEndDate,
                 isAdmin: adminUids.has(doc.id),
                 createdAt,
                 lastLogin

@@ -304,12 +304,22 @@ function renderUsers(filtered = null) {
         const isExpired = expiryDate && expiryDate < new Date();
         const statusClass = user.emailVerified ? 'badge-active' : 'badge-pending';
         const statusText = user.emailVerified ? 'Verified' : 'Unverified';
-        
+
+        // License Key column: show trial status when on trial with no active license
+        const hasActiveLicense = user.licenseKey && expiryDate && !isExpired;
+        let licenseCell = `<code>${user.licenseKey || 'N/A'}</code>`;
+        if (user.isTrial && user.trialEndDate && !hasActiveLicense) {
+            const hoursLeft = Math.max(0, Math.ceil((new Date(user.trialEndDate) - new Date()) / 3600000));
+            licenseCell = hoursLeft > 0
+                ? `<span style="color:#ff9800;font-weight:600;">🎉 Trial: ${hoursLeft}h left</span>`
+                : `<span style="color:#dc3545;font-weight:600;">Trial Expired</span>`;
+        }
+
         html += `
             <tr>
                 <td><input type="checkbox" class="user-checkbox" data-user-id="${user.userId}" data-user-email="${user.email}"></td>
                 <td><strong>${user.email}</strong></td>
-                <td><code>${user.licenseKey || 'N/A'}</code></td>
+                <td>${licenseCell}</td>
                 <td><span class="badge ${statusClass}">${statusText}</span></td>
                 <td>${expiryDate ? formatDate(expiryDate) : 'N/A'} ${isExpired ? '<span class="badge badge-expired">Expired</span>' : ''}</td>
                 <td>${user.lastLogin ? formatDate(new Date(user.lastLogin)) : 'Never'}</td>
