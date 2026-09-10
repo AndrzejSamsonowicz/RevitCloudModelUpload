@@ -94,14 +94,41 @@
             text-align: center;
             line-height: 1.5;
         }
+        /* Pre-login card buttons — match Forma's #login .login-card button */
         #loginScreen .login-card button {
+            background-color: #0696D7 !important;
+            color: #fff !important;
+            border: 1px solid #0696D7 !important;
+            padding: 8px 16px !important;
+            border-radius: 4px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
             min-width: 0 !important;
             width: 240px !important;
             height: auto !important;
-            padding: 10px 16px !important;
-            font-size: 13px !important;
-            font-weight: 700 !important;
             margin: 0 !important;
+        }
+        #loginScreen .login-card button:hover {
+            background-color: #0057A0 !important;
+            border-color: #0057A0 !important;
+        }
+
+        /* Left panel (Logout) — match Forma's #hubsPanel button */
+        #hubsPanel button {
+            background-color: #0696D7 !important;
+            color: #fff !important;
+            border: 1px solid #0696D7 !important;
+            border-radius: 4px !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            min-width: 0 !important;
+            height: auto !important;
+            padding: 7px 14px !important;
+            margin: 0 !important;
+        }
+        #hubsPanel button:hover {
+            background-color: #0057A0 !important;
+            border-color: #0057A0 !important;
         }
         #loginScreen #error {
             width: 100%;
@@ -637,12 +664,11 @@
         <div style="display: flex; height: 100vh;">
             <!-- Left column - Logout, Hubs and Projects (1/5 width) -->
             <div style="width: 20%; display: flex; flex-direction: column; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">
-                <!-- Header Section -->
-                <div style="flex-shrink: 0; margin-bottom: 20px;">
-                    <button id="logoutBtn" style="width: 100%;">Logout</button>
-                </div>
                 <!-- Hubs section -->
                 <div id="hubsPanel" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0;">
+                    <div style="flex-shrink: 0; margin-bottom: 15px;">
+                        <button id="logoutBtn" style="width: 100%;">Logout</button>
+                    </div>
                     <h3 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; margin-bottom: 15px; flex-shrink: 0;">Hubs</h3>
                     <input type="text" class="filter-input" id="hubFilter" placeholder="Filter hubs..." style="flex-shrink: 0;">
                     <div id="hubsList" style="flex: 1; overflow-y: auto; margin-top: 10px;">
