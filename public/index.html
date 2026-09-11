@@ -149,19 +149,34 @@
             font-weight: 700 !important;
         }
 
+        /* Hubs / Projects sidebar — same visual language as Forma's #hubsPanel:
+           quiet light-gray panel, small uppercase section label. Both panels
+           styled identically since this app stacks Hubs and Projects in one
+           column instead of splitting them like Forma does. */
+        #hubsPanel, #projectsPanel {
+            background: #fafbfc;
+        }
+        #hubsPanel h3, #projectsPanel h3 {
+            font-size: 12px !important;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #888;
+            font-weight: 700 !important;
+        }
+
         .hidden {
             display: none !important;
         }
 
         .hub-item {
-            padding: 10px;
+            padding: 8px 10px;
             margin: 5px 0;
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.2s ease;
-            font-size: 14px;
+            font-size: 12.5px;
             font-family: 'Artifact Elements', Arial, sans-serif;
             display: flex;
             justify-content: space-between;
@@ -192,14 +207,15 @@
         }
 
         .project-item {
-            padding: 10px;
+            padding: 8px 10px;
             margin: 5px 0;
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.2s ease;
-            font-size: 14px;
+            font-size: 12.5px;
+            font-family: 'Artifact Elements', Arial, sans-serif;
         }
 
         .project-item:hover {
@@ -225,8 +241,14 @@
             margin-bottom: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            font-size: 14px;
+            font-size: 12.5px;
             font-family: 'Artifact Elements', Arial, sans-serif;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .filter-input:focus {
+            border-color: #0696D7;
+            box-shadow: 0 0 0 3px rgba(6, 150, 215, 0.14);
         }
 
         .file-checkbox-item {
