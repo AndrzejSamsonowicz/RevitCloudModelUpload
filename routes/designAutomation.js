@@ -537,13 +537,18 @@ router.post('/scheduled-publish', async (req, res, next) => {
             }
 
             console.log(result.confirmed
-                ? `[Scheduled Publish] ✓ publish confirmed complete for ${fileName} (command ${result.commandId})`
+                ? `[Scheduled Publish] ✓ publish confirmed complete for ${fileName} (command ${result.commandId}): ${result.detail}`
                 : `[Scheduled Publish] ⚠ publish accepted but unconfirmed for ${fileName}: ${result.detail}`);
 
             return res.json({
                 success: true,
-                data: { commandId: result.commandId, status: result.jobStatus, confirmed: result.confirmed },
-                message: result.confirmed ? `Scheduled publish confirmed for ${fileName}` : result.detail
+                data: {
+                    commandId: result.commandId,
+                    status: result.jobStatus,
+                    confirmed: result.confirmed,
+                    versionCreated: result.versionCreated
+                },
+                message: result.detail
             });
         } catch (apsError) {
             const apsStatus = apsError.response?.status;

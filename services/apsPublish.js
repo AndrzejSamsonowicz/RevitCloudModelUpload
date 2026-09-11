@@ -145,11 +145,27 @@ async function getPublishJobStatus(projectId, lineageId, token) {
  * Issue C4RModelPublish, then poll C4RModelGetPublishJob for a bounded window so the
  * caller gets a real answer instead of trusting the "committed" acceptance status.
  *
- * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, detail: string}>}
+ * `status: 'complete'` only means the job finished — it does NOT mean a new version
+ * was created. If the cloud model had no unsynchronized changes (isUpToDate was
+ * already true beforehand), the job completes as a no-op. We capture `lastPublishTime`
+ * before issuing the command and compare it to the value after completion to tell
+ * these apart, so callers/logs don't claim a version was published when nothing changed.
+ *
+ * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, versionCreated: boolean|null, detail: string}>}
  *   confirmed=true  -> jobStatus is 'complete' or 'failed' (success reflects which)
  *   confirmed=false -> still pending/inprogress after maxWaitMs; not a failure, just unresolved
+ *   versionCreated  -> only meaningful when jobStatus === 'complete'; null otherwise
  */
 async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 20000, intervalMs = 3000 } = {}) {
+    let baselinePublishTime = null;
+    try {
+        const baseline = await getPublishJobStatus(projectId, lineageId, token);
+        baselinePublishTime = baseline.lastPublishTime;
+    } catch (err) {
+        // Best-effort — if we can't get a baseline, we just can't distinguish
+        // "published a new version" from "already up to date" afterward.
+    }
+
     const { commandId } = await publishModel(projectId, lineageId, token);
 
     const deadline = Date.now() + maxWaitMs;
@@ -165,11 +181,19 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
             continue;
         }
         if (last.status === 'complete') {
-            return { commandId, confirmed: true, success: true, jobStatus: 'complete', detail: 'Publish confirmed complete' };
+            const versionCreated = baselinePublishTime !== null
+                ? last.lastPublishTime !== baselinePublishTime
+                : null;
+            return {
+                commandId, confirmed: true, success: true, jobStatus: 'complete', versionCreated,
+                detail: versionCreated === false
+                    ? 'Model already up to date - no unpublished changes, no new version created'
+                    : 'Publish confirmed complete'
+            };
         }
         if (last.status === 'failed') {
             return {
-                commandId, confirmed: true, success: false, jobStatus: 'failed',
+                commandId, confirmed: true, success: false, jobStatus: 'failed', versionCreated: false,
                 detail: last.hasConflict ? 'Publish failed: synchronization conflict' : 'Publish job reported failed'
             };
         }
@@ -177,7 +201,7 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
     }
 
     return {
-        commandId, confirmed: false, success: null, jobStatus: last.status,
+        commandId, confirmed: false, success: null, jobStatus: last.status, versionCreated: null,
         detail: `Publish command accepted but not confirmed complete after ${Math.round(maxWaitMs / 1000)}s (last status: ${last.status})`
     };
 }

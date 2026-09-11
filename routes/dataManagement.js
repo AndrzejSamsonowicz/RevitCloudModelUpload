@@ -328,7 +328,7 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
         }
 
         console.log(result.confirmed
-            ? `✓ Publish confirmed complete (command ${result.commandId})`
+            ? `✓ Publish confirmed complete (command ${result.commandId}): ${result.detail}`
             : `⚠ Publish accepted but unconfirmed (command ${result.commandId}): ${result.detail}`);
 
         res.json({
@@ -336,6 +336,7 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
             commandId: result.commandId,
             status: result.jobStatus,
             confirmed: result.confirmed,
+            versionCreated: result.versionCreated,
             message: result.detail
         });
     } catch (error) {

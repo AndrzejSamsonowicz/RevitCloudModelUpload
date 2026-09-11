@@ -195,8 +195,11 @@ async function triggerPublishing(userId, schedule) {
     // Both RCM and C4R publish via the C4RModelPublish command. "confirmed" reflects
     // whether the server actually polled C4RModelGetPublishJob and saw it complete -
     // "committed" from the command alone only means the request was accepted.
+    // "versionCreated" further distinguishes an actual new ACC version from a no-op
+    // (the model already had no unpublished changes, so nothing new was created).
     const commandId = response.data.data?.commandId;
     const confirmed = response.data.data?.confirmed;
+    const versionCreated = response.data.data?.versionCreated;
 
     if (!commandId) {
       throw new Error('No commandId returned from server');
@@ -219,9 +222,12 @@ async function triggerPublishing(userId, schedule) {
       status: confirmed === false ? 'pending' : 'success',
       workItemId: null,
       commandId: commandId || null,
+      versionCreated: versionCreated ?? null,
       message: confirmed === false
         ? (response.data.message || 'Publish command issued; completion not yet confirmed')
-        : 'Publish confirmed complete',
+        : (response.data.message || (versionCreated === false
+            ? 'Model already up to date - no unpublished changes, no new version created'
+            : 'Publish confirmed complete')),
       source: 'scheduled'
     });
     

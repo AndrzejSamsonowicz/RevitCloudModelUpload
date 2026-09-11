@@ -993,7 +993,9 @@ async function publishModel() {
                 const isRCM = file.modelType === 'singleuser';
                 const isC4R = !isRCM;
 
-                if (data.confirmed) {
+                if (data.confirmed && data.versionCreated === false) {
+                    addLog(`  ℹ Model already up to date - no new version created`, 'info');
+                } else if (data.confirmed) {
                     addLog(`  ✓ Publish confirmed complete`, 'success');
                 } else {
                     addLog(`  ⚠ Publish accepted, not yet confirmed complete`, 'info');
@@ -1015,6 +1017,7 @@ async function publishModel() {
                         commandId: data.commandId,
                         status: data.status,
                         confirmed: data.confirmed,
+                        versionCreated: data.versionCreated,
                         itemId: file.itemId,
                         projectId: selectedProjectId,
                         fileType: 'versions:autodesk.bim360:C4RModel',
