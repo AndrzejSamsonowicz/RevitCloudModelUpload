@@ -169,6 +169,52 @@ async function getPublishJobStatus(projectId, lineageId, token) {
 }
 
 /**
+ * Record that `callerId` is publishing `lineageId` right now, and report whether
+ * someone else (a different caller) already did the same within `windowMs`.
+ *
+ * This is best-effort visibility, not a lock - it never blocks or delays a publish,
+ * it just lets Publishing History flag "another user published this file around the
+ * same time" so a tenant isn't confused if the version they expected to bump was
+ * actually already moved by someone else's concurrent request. Autodesk's own
+ * C4RModelPublish appears to deduplicate truly concurrent commands against the same
+ * lineage on its own (see the shared PUBLISH_COMMAND_TYPE test in this repo's commit
+ * history), so this is purely informational.
+ *
+ * @param {string} lineageId - lineage URN (`dm.lineage`)
+ * @param {string|null} callerId - Firebase user ID of whoever triggered this publish
+ * @param {number} windowMs - how recently another caller must have published to count as concurrent
+ * @returns {Promise<boolean>} true if a different caller published this lineage within the window
+ */
+async function checkAndMarkConcurrentPublish(lineageId, callerId, windowMs = 60000) {
+    if (!callerId) {
+        return false;
+    }
+    try {
+        const admin = require('firebase-admin');
+        const db = admin.firestore();
+        const docRef = db.collection('publishActivity').doc(encodeURIComponent(lineageId));
+        const now = Date.now();
+
+        let concurrentPublishDetected = false;
+        await db.runTransaction(async (tx) => {
+            const doc = await tx.get(docRef);
+            if (doc.exists) {
+                const data = doc.data();
+                if (data.lastTriggeredBy && data.lastTriggeredBy !== callerId && (now - data.lastTriggeredAt) < windowMs) {
+                    concurrentPublishDetected = true;
+                }
+            }
+            tx.set(docRef, { lastTriggeredBy: callerId, lastTriggeredAt: now });
+        });
+        return concurrentPublishDetected;
+    } catch (err) {
+        // Best-effort - never let this check block or fail an actual publish.
+        console.warn('[checkAndMarkConcurrentPublish] check failed:', err.message);
+        return false;
+    }
+}
+
+/**
  * Issue C4RModelPublish, then poll C4RModelGetPublishJob for a bounded window so the
  * caller gets a real answer instead of trusting the "committed" acceptance status.
  *
@@ -179,13 +225,14 @@ async function getPublishJobStatus(projectId, lineageId, token) {
  * last publish is a no-op: the command still reports "complete", but the tip version
  * doesn't move.
  *
- * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, versionCreated: boolean|null, detail: string}>}
+ * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, versionCreated: boolean|null, concurrentPublishDetected: boolean, detail: string}>}
  *   confirmed=true  -> jobStatus is 'complete' or 'failed' (success reflects which)
  *   confirmed=false -> still pending/inprogress after maxWaitMs; not a failure, just unresolved
  *   versionCreated  -> only meaningful when jobStatus === 'complete'; null if tip version couldn't be read
  */
-async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 40000, intervalMs = 4000 } = {}) {
+async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 40000, intervalMs = 4000, callerId = null } = {}) {
     const baselineVersion = await getTipVersionNumber(projectId, lineageId, token);
+    const concurrentPublishDetected = await checkAndMarkConcurrentPublish(lineageId, callerId, maxWaitMs + 20000);
 
     const { commandId } = await publishModel(projectId, lineageId, token);
 
@@ -206,18 +253,19 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
             const versionCreated = (baselineVersion !== null && finalVersion !== null)
                 ? finalVersion > baselineVersion
                 : null;
-            return {
-                commandId, confirmed: true, success: true, jobStatus: 'complete', versionCreated,
-                detail: versionCreated === false
-                    ? 'Model already up to date - no changes since the last publish, nothing new was published'
-                    : versionCreated === true
-                        ? `Publish confirmed - new version v${finalVersion} created`
-                        : 'Publish confirmed complete'
-            };
+            let detail = versionCreated === false
+                ? 'Model already up to date - no changes since the last publish, nothing new was published'
+                : versionCreated === true
+                    ? `Publish confirmed - new version v${finalVersion} created`
+                    : 'Publish confirmed complete';
+            if (concurrentPublishDetected) {
+                detail += ' (another user also triggered a publish for this file at nearly the same time)';
+            }
+            return { commandId, confirmed: true, success: true, jobStatus: 'complete', versionCreated, concurrentPublishDetected, detail };
         }
         if (last.status === 'failed') {
             return {
-                commandId, confirmed: true, success: false, jobStatus: 'failed', versionCreated: false,
+                commandId, confirmed: true, success: false, jobStatus: 'failed', versionCreated: false, concurrentPublishDetected,
                 detail: last.hasConflict ? 'Publish failed: synchronization conflict' : 'Publish job reported failed'
             };
         }
@@ -225,7 +273,7 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
     }
 
     return {
-        commandId, confirmed: false, success: null, jobStatus: last.status, versionCreated: null,
+        commandId, confirmed: false, success: null, jobStatus: last.status, versionCreated: null, concurrentPublishDetected,
         detail: `Publish command accepted but not confirmed complete after ${Math.round(maxWaitMs / 1000)}s (last status: ${last.status})`
     };
 }

@@ -204,6 +204,7 @@ async function triggerPublishing(userId, schedule) {
     const commandId = response.data.data?.commandId;
     const confirmed = response.data.data?.confirmed;
     const versionCreated = response.data.data?.versionCreated;
+    const concurrentPublishDetected = response.data.data?.concurrentPublishDetected;
 
     if (!commandId) {
       throw new Error('No commandId returned from server');
@@ -227,6 +228,7 @@ async function triggerPublishing(userId, schedule) {
       workItemId: null,
       commandId: commandId || null,
       versionCreated: versionCreated ?? null,
+      concurrentPublishDetected: concurrentPublishDetected ?? false,
       message: confirmed === false
         ? (response.data.message || 'Publish command issued; completion not yet confirmed')
         : (response.data.message || (versionCreated === false

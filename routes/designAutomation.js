@@ -529,7 +529,7 @@ router.post('/scheduled-publish', async (req, res, next) => {
         try {
             // "committed" from the command alone only means "accepted" - confirm the
             // actual outcome via C4RModelGetPublishJob before reporting success.
-            const result = await publishModelAndConfirm(projectId, lineageId, userToken);
+            const result = await publishModelAndConfirm(projectId, lineageId, userToken, { callerId: userId });
 
             if (result.confirmed && !result.success) {
                 console.error(`[Scheduled Publish] publish job failed for ${fileName}: ${result.detail}`);
@@ -546,7 +546,8 @@ router.post('/scheduled-publish', async (req, res, next) => {
                     commandId: result.commandId,
                     status: result.jobStatus,
                     confirmed: result.confirmed,
-                    versionCreated: result.versionCreated
+                    versionCreated: result.versionCreated,
+                    concurrentPublishDetected: result.concurrentPublishDetected
                 },
                 message: result.detail
             });

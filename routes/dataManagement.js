@@ -20,6 +20,7 @@ function getAccessToken(req, res, next) {
     }
 
     req.accessToken = accessToken;
+    req.firebaseUserId = authRoutes.getUserIdFromSession(sessionId);
     next();
 }
 
@@ -320,7 +321,7 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
 
         // "committed" from the command alone only means "accepted" - confirm the
         // actual outcome via C4RModelGetPublishJob before reporting success.
-        const result = await publishModelAndConfirm(projectId, lineageId, req.accessToken);
+        const result = await publishModelAndConfirm(projectId, lineageId, req.accessToken, { callerId: req.firebaseUserId });
 
         if (result.confirmed && !result.success) {
             console.error(`✗ Publish job failed for lineage ${lineageId}: ${result.detail}`);
@@ -337,6 +338,7 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
             status: result.jobStatus,
             confirmed: result.confirmed,
             versionCreated: result.versionCreated,
+            concurrentPublishDetected: result.concurrentPublishDetected,
             message: result.detail
         });
     } catch (error) {

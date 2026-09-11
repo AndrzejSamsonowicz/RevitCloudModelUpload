@@ -1018,6 +1018,7 @@ async function publishModel() {
                         status: data.status,
                         confirmed: data.confirmed,
                         versionCreated: data.versionCreated,
+                        concurrentPublishDetected: data.concurrentPublishDetected,
                         itemId: file.itemId,
                         projectId: selectedProjectId,
                         fileType: 'versions:autodesk.bim360:C4RModel',
@@ -3271,6 +3272,7 @@ async function refreshPublishingHistory() {
                             itemId: data.itemId,
                             projectId: data.projectId,
                             versionCreated: data.versionCreated ?? null,
+                            concurrentPublishDetected: data.concurrentPublishDetected ?? false,
                             source: data.source || 'scheduled', // Use actual source from Firestore
                             age: entryAge > tenMinutes ? 'timeout' : 'active'
                         }
@@ -3393,6 +3395,10 @@ async function refreshPublishingHistory() {
             const noOpBadge = isNoOpPublish
                 ? '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">NO CHANGES</span>'
                 : '';
+
+            const concurrentBadge = entry.details?.concurrentPublishDetected
+                ? '<span style="background: #fd7e14; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;" title="Another user also triggered a publish for this file at nearly the same time">SIMULTANEOUS</span>'
+                : '';
             
             html += `
                 <div style="background: white; border-left: 4px solid ${statusColor}; padding: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -3404,6 +3410,7 @@ async function refreshPublishingHistory() {
                                 ${sourceBadge}
                                 ${fileTypeBadge}
                                 ${noOpBadge}
+                                ${concurrentBadge}
                             </div>
                             <div style="font-size: 12px; color: #666;">
                                 ${entry.projectName || 'Unknown Project'}
