@@ -161,9 +161,11 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
     try {
         const baseline = await getPublishJobStatus(projectId, lineageId, token);
         baselinePublishTime = baseline.lastPublishTime;
+        console.log(`[publishModelAndConfirm] baseline for ${lineageId}: status=${baseline.status}, lastPublishTime=${baseline.lastPublishTime}, isUpToDate=${baseline.isUpToDate}`);
     } catch (err) {
         // Best-effort — if we can't get a baseline, we just can't distinguish
         // "published a new version" from "already up to date" afterward.
+        console.warn(`[publishModelAndConfirm] baseline status check failed for ${lineageId}:`, err.response?.data || err.message);
     }
 
     const { commandId } = await publishModel(projectId, lineageId, token);
@@ -184,6 +186,7 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
             const versionCreated = baselinePublishTime !== null
                 ? last.lastPublishTime !== baselinePublishTime
                 : null;
+            console.log(`[publishModelAndConfirm] complete for ${lineageId}: baselineLastPublishTime=${baselinePublishTime}, finalLastPublishTime=${last.lastPublishTime}, versionCreated=${versionCreated}`);
             return {
                 commandId, confirmed: true, success: true, jobStatus: 'complete', versionCreated,
                 detail: versionCreated === false
