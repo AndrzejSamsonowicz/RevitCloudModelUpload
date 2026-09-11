@@ -9,7 +9,7 @@ const designAutomation = require('../services/designAutomation');
 const authRoutes = require('./auth');
 const axios = require('axios');
 const apsClient = require('../services/apsClient');
-const { resolveLineageId, publishModel } = require('../services/apsPublish');
+const { resolveLineageId, publishModelAndConfirm } = require('../services/apsPublish');
 
 // Secure file upload configuration
 const upload = multer({
@@ -527,12 +527,23 @@ router.post('/scheduled-publish', async (req, res, next) => {
         console.log(`[Scheduled Publish] Publishing ${modelType || 'cloud'} model ${fileName} (lineage ${lineageId})`);
 
         try {
-            const { commandId, status } = await publishModel(projectId, lineageId, userToken);
-            console.log(`[Scheduled Publish] ✓ publish command issued for ${fileName} (${status})`);
+            // "committed" from the command alone only means "accepted" - confirm the
+            // actual outcome via C4RModelGetPublishJob before reporting success.
+            const result = await publishModelAndConfirm(projectId, lineageId, userToken);
+
+            if (result.confirmed && !result.success) {
+                console.error(`[Scheduled Publish] publish job failed for ${fileName}: ${result.detail}`);
+                return res.status(502).json({ error: result.detail });
+            }
+
+            console.log(result.confirmed
+                ? `[Scheduled Publish] ✓ publish confirmed complete for ${fileName} (command ${result.commandId})`
+                : `[Scheduled Publish] ⚠ publish accepted but unconfirmed for ${fileName}: ${result.detail}`);
+
             return res.json({
                 success: true,
-                data: { commandId, status },
-                message: `Scheduled publish initiated for ${fileName}`
+                data: { commandId: result.commandId, status: result.jobStatus, confirmed: result.confirmed },
+                message: result.confirmed ? `Scheduled publish confirmed for ${fileName}` : result.detail
             });
         } catch (apsError) {
             const apsStatus = apsError.response?.status;

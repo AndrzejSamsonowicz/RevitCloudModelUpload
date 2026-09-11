@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const authRoutes = require('./auth');
-const { resolveLineageId, publishModel } = require('../services/apsPublish');
+const { resolveLineageId, publishModelAndConfirm } = require('../services/apsPublish');
 
 // Middleware to extract access token from session
 function getAccessToken(req, res, next) {
@@ -318,13 +318,25 @@ router.post('/publish/:itemId', getAccessToken, async (req, res) => {
         const lineageId = await resolveLineageId(projectId, itemId, req.accessToken);
         console.log(`✓ Publishing existing unpublished changes (lineage ${lineageId})`);
 
-        const { commandId, status } = await publishModel(projectId, lineageId, req.accessToken);
+        // "committed" from the command alone only means "accepted" - confirm the
+        // actual outcome via C4RModelGetPublishJob before reporting success.
+        const result = await publishModelAndConfirm(projectId, lineageId, req.accessToken);
+
+        if (result.confirmed && !result.success) {
+            console.error(`✗ Publish job failed for lineage ${lineageId}: ${result.detail}`);
+            return res.status(502).json({ error: result.detail });
+        }
+
+        console.log(result.confirmed
+            ? `✓ Publish confirmed complete (command ${result.commandId})`
+            : `⚠ Publish accepted but unconfirmed (command ${result.commandId}): ${result.detail}`);
 
         res.json({
             success: true,
-            commandId,
-            status,
-            message: 'Publish command initiated'
+            commandId: result.commandId,
+            status: result.jobStatus,
+            confirmed: result.confirmed,
+            message: result.detail
         });
     } catch (error) {
         console.error('Error publishing model:', error.response?.data || error.message);

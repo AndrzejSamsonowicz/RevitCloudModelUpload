@@ -934,7 +934,8 @@ async function publishModel() {
             fileName: item.dataset.fileName,
             itemId: item.dataset.itemId,
             region: item.dataset.region || 'US',
-            revitVersion: item.dataset.revitVersion || '2026' // Auto-detected or default
+            revitVersion: item.dataset.revitVersion || '2026', // Auto-detected or default
+            modelType: item.dataset.modelType || ''
         };
     });
 
@@ -987,33 +988,33 @@ async function publishModel() {
             const data = await response.json();
 
             if (response.ok) {
-                if (data.workItemId) {
-                    // Design Automation path (single-user models)
-                    addLog(`  ✓ Design Automation WorkItem created`, 'success');
-                    addLog(`  WorkItem ID: ${data.workItemId}`);
-                    addLog(`  File will be saved to ACC with new version`);
+                // Determine file type from the model's own modelType, not the response
+                // (both RCM and C4R now go through the same C4RModelPublish command).
+                const isRCM = file.modelType === 'singleuser';
+                const isC4R = !isRCM;
+
+                if (data.confirmed) {
+                    addLog(`  ✓ Publish confirmed complete`, 'success');
                 } else {
-                    // PublishModel API path (workshared models)
-                    addLog(`  ✓ Publish command initiated successfully`, 'success');
-                    addLog(`  Command ID: ${data.commandId}`);
-                    addLog(`  Status: ${data.status}`);
+                    addLog(`  ⚠ Publish accepted, not yet confirmed complete`, 'info');
+                }
+                addLog(`  Command ID: ${data.commandId}`);
+                addLog(`  Status: ${data.status}`);
+                if (data.message) {
+                    addLog(`  ${data.message}`);
                 }
                 successCount++;
-                
-                // Determine file type based on response
-                const isRCM = !!data.workItemId; // RCM files use Design Automation
-                const isC4R = !!data.commandId;  // C4R files use PublishModel API
-                
-                // Save to publishing history
+
+                // Save to publishing history using the server's real confirmation status
                 saveToPublishingHistory(
                     file.fileName,
                     selectedProjectName || 'Unknown Project',
-                    'success',
-                    data.workItemId ? 'Publishing RCM file via Design Automation...' : 'Publishing C4R file...',
+                    data.confirmed ? 'success' : 'pending',
+                    data.message || (isRCM ? 'Publishing RCM file...' : 'Publishing C4R file...'),
                     {
-                        workItemId: data.workItemId,
                         commandId: data.commandId,
                         status: data.status,
+                        confirmed: data.confirmed,
                         itemId: file.itemId,
                         projectId: selectedProjectId,
                         fileType: 'versions:autodesk.bim360:C4RModel',
@@ -1029,16 +1030,8 @@ async function publishModel() {
                 let errorType = 'error';
                 let errorMessage = 'Publish failed: disabled service i.e.: Cloud Models for Revit, or the file is corrupted';
                 let helpfulTip = '';
-                let isRCM = false;
-                let isC4R = false;
-                
-                // Check for specific error patterns
-                if (data.details) {
-                    // 403 with code 'C4R' typically means RCM service not enabled
-                    if (data.details.statusCode === 403 && data.details.errorCode === 'C4R') {
-                        isRCM = true; // This error specifically indicates RCM file
-                    }
-                }
+                let isRCM = file.modelType === 'singleuser';
+                let isC4R = !isRCM;
                 
                 // Save to publishing history with enhanced details
                 saveToPublishingHistory(
@@ -2211,6 +2204,7 @@ function renderFilesList() {
         tr.dataset.fileName = file.name;
         tr.dataset.index = file.index;
         tr.dataset.region = window.selectedHubRegion || 'US';
+        tr.dataset.modelType = file.modelType || '';
         
         // Auto-detect Revit version from file metadata or filename
         const detectedVersion = detectRevitVersion(file.name, file);
@@ -3232,6 +3226,8 @@ async function refreshPublishingHistory() {
                         if (data.status === 'success') {
                             const fileType = data.isRCM ? 'RCM' : (data.isC4R ? 'C4R' : '');
                             displayMessage = `${fileType} file published successfully at ${data.scheduledTime}`;
+                        } else if (data.status === 'pending') {
+                            displayMessage = 'Publish command accepted; completion not yet confirmed';
                         } else {
                             displayMessage = data.error || 'Scheduled publish failed';
                         }
@@ -3247,10 +3243,10 @@ async function refreshPublishingHistory() {
                     const entryAge = Date.now() - new Date(data.actualTime).getTime();
                     const tenMinutes = 10 * 60 * 1000;
                     
-                    // If entry is old and still has 'info' status, mark it as timeout
-                    if (displayStatus === 'info' && entryAge > tenMinutes) {
+                    // If entry is old and still unconfirmed, mark it as timeout
+                    if ((displayStatus === 'info' || displayStatus === 'pending') && entryAge > tenMinutes) {
                         displayStatus = 'error';
-                        displayMessage = 'Scheduled publish timed out (no response from Design Automation)';
+                        displayMessage = 'Scheduled publish timed out without confirmation';
                     }
                     
                     return {

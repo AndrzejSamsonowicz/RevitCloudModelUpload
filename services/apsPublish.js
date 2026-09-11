@@ -15,6 +15,7 @@ const axios = require('axios');
 
 const APS_BASE = 'https://developer.api.autodesk.com';
 const PUBLISH_COMMAND_TYPE = 'commands:autodesk.bim360:C4RModelPublish';
+const PUBLISH_JOB_STATUS_COMMAND_TYPE = 'commands:autodesk.bim360:C4RModelGetPublishJob';
 
 /**
  * Resolve a cloud-model URN to its lineage URN (`dm.lineage`), which is what the
@@ -92,4 +93,93 @@ async function publishModel(projectId, lineageId, token) {
     };
 }
 
-module.exports = { resolveLineageId, publishModel, PUBLISH_COMMAND_TYPE };
+/**
+ * Check the status of a previously-issued C4RModelPublish job.
+ *
+ * `C4RModelPublish` returning `status: "committed"` only means the command was
+ * *accepted* — it says nothing about whether a new version actually got created.
+ * This is the only way to find out; see API_REFERENCE_PUBLISHMODEL.md.
+ *
+ * @param {string} projectId - ACC project id, `b.` prefixed
+ * @param {string} lineageId - lineage URN (`dm.lineage`)
+ * @param {string} token - user 3-legged token
+ * @returns {Promise<{status: string, isUpToDate: boolean|null, hasConflict: boolean|null}>}
+ *          status: 'pending' | 'inprogress' | 'complete' | 'failed' (or 'unknown' if unparseable)
+ */
+async function getPublishJobStatus(projectId, lineageId, token) {
+    const payload = {
+        jsonapi: { version: '1.0' },
+        data: {
+            type: 'commands',
+            attributes: {
+                extension: { type: PUBLISH_JOB_STATUS_COMMAND_TYPE, version: '1.0.0' }
+            },
+            relationships: {
+                resources: { data: [{ type: 'items', id: lineageId }] }
+            }
+        }
+    };
+
+    const response = await axios.post(
+        `${APS_BASE}/data/v1/projects/${projectId}/commands`,
+        payload,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/vnd.api+json'
+            }
+        }
+    );
+
+    const attrs = response.data?.data?.attributes;
+    const data = attrs?.extension?.data || {};
+    return {
+        status: attrs?.status || 'unknown',
+        isUpToDate: data.isUpToDate ?? null,
+        hasConflict: data.hasConflict ?? null,
+        lastPublishTime: data.lastPublishTime || null
+    };
+}
+
+/**
+ * Issue C4RModelPublish, then poll C4RModelGetPublishJob for a bounded window so the
+ * caller gets a real answer instead of trusting the "committed" acceptance status.
+ *
+ * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, detail: string}>}
+ *   confirmed=true  -> jobStatus is 'complete' or 'failed' (success reflects which)
+ *   confirmed=false -> still pending/inprogress after maxWaitMs; not a failure, just unresolved
+ */
+async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 20000, intervalMs = 3000 } = {}) {
+    const { commandId } = await publishModel(projectId, lineageId, token);
+
+    const deadline = Date.now() + maxWaitMs;
+    let last = { status: 'pending' };
+    while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+        try {
+            last = await getPublishJobStatus(projectId, lineageId, token);
+        } catch (err) {
+            // A transient status-check failure doesn't mean the publish itself failed —
+            // keep polling until the deadline rather than giving up on the first hiccup.
+            last = { status: 'pending', error: err.response?.data || err.message };
+            continue;
+        }
+        if (last.status === 'complete') {
+            return { commandId, confirmed: true, success: true, jobStatus: 'complete', detail: 'Publish confirmed complete' };
+        }
+        if (last.status === 'failed') {
+            return {
+                commandId, confirmed: true, success: false, jobStatus: 'failed',
+                detail: last.hasConflict ? 'Publish failed: synchronization conflict' : 'Publish job reported failed'
+            };
+        }
+        // 'pending' / 'inprogress' / 'unknown' -> keep polling
+    }
+
+    return {
+        commandId, confirmed: false, success: null, jobStatus: last.status,
+        detail: `Publish command accepted but not confirmed complete after ${Math.round(maxWaitMs / 1000)}s (last status: ${last.status})`
+    };
+}
+
+module.exports = { resolveLineageId, publishModel, getPublishJobStatus, publishModelAndConfirm, PUBLISH_COMMAND_TYPE };

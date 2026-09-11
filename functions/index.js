@@ -183,22 +183,28 @@ async function triggerPublishing(userId, schedule) {
           'Content-Type': 'application/json',
           'X-Cloud-Function-Auth': authKeyValue
         },
-        timeout: 30000 // 30 second timeout
+        // The server now polls C4RModelGetPublishJob (up to ~20s) before responding
+        // so it can report real completion instead of just command-acceptance -
+        // give it headroom beyond that wait.
+        timeout: 45000
       }
     );
     
     console.log(`Publish response for ${schedule.fileName}:`, response.data);
 
-    // Both RCM and C4R now publish via the C4RModelPublish command and return a commandId.
-    // workItemId is only present for legacy Design Automation responses.
-    const workItemId = response.data.data?.workItemId;
+    // Both RCM and C4R publish via the C4RModelPublish command. "confirmed" reflects
+    // whether the server actually polled C4RModelGetPublishJob and saw it complete -
+    // "committed" from the command alone only means the request was accepted.
     const commandId = response.data.data?.commandId;
+    const confirmed = response.data.data?.confirmed;
 
-    if (!workItemId && !commandId) {
-      throw new Error('No workItemId or commandId returned from server');
+    if (!commandId) {
+      throw new Error('No commandId returned from server');
     }
-    
-    // Save initial log entry - webhook will update it when workitem completes
+
+    // Save log entry. If the server couldn't confirm completion within its wait
+    // window, mark it pending rather than success - it may still land, but we
+    // haven't verified it, so don't claim we have.
     await db.collection('publishingLogs').add({
       userId: userId,
       fileId: schedule.fileId,
@@ -210,10 +216,12 @@ async function triggerPublishing(userId, schedule) {
       isC4R: !isRCM && schedule.isCloudModel,
       scheduledTime: `${schedule.time} (${schedule.timezone})`,
       actualTime: new Date().toISOString(),
-      status: workItemId ? 'pending' : 'success', // publish command completes immediately
-      workItemId: workItemId || null,
+      status: confirmed === false ? 'pending' : 'success',
+      workItemId: null,
       commandId: commandId || null,
-      message: 'Publish command issued successfully',
+      message: confirmed === false
+        ? (response.data.message || 'Publish command issued; completion not yet confirmed')
+        : 'Publish confirmed complete',
       source: 'scheduled'
     });
     
