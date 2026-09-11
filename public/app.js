@@ -3246,10 +3246,12 @@ async function refreshPublishingHistory() {
                     const entryAge = Date.now() - new Date(data.actualTime).getTime();
                     const tenMinutes = 10 * 60 * 1000;
                     
-                    // If entry is old and still unconfirmed, mark it as timeout
+                    // If entry is old and still unconfirmed, we genuinely don't know the outcome -
+                    // the publish command was accepted, but nothing ever re-checked whether it
+                    // finished. Flag it for the user to verify rather than claiming it failed.
                     if ((displayStatus === 'info' || displayStatus === 'pending') && entryAge > tenMinutes) {
-                        displayStatus = 'error';
-                        displayMessage = 'Scheduled publish timed out without confirmation';
+                        displayStatus = 'warning';
+                        displayMessage = 'Could not confirm this publish completed - check ACC Docs directly to verify';
                     }
                     
                     return {

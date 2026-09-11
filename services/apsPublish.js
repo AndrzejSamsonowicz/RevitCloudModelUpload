@@ -184,7 +184,7 @@ async function getPublishJobStatus(projectId, lineageId, token) {
  *   confirmed=false -> still pending/inprogress after maxWaitMs; not a failure, just unresolved
  *   versionCreated  -> only meaningful when jobStatus === 'complete'; null if tip version couldn't be read
  */
-async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 20000, intervalMs = 3000 } = {}) {
+async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 40000, intervalMs = 4000 } = {}) {
     const baselineVersion = await getTipVersionNumber(projectId, lineageId, token);
 
     const { commandId } = await publishModel(projectId, lineageId, token);

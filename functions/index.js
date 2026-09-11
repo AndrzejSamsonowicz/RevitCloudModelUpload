@@ -15,7 +15,10 @@ const db = admin.firestore();
  * Scheduled Cloud Function that runs every 5 minutes
  * Checks all users' publishing schedules and triggers publishing for matching files
  */
-exports.checkScheduledPublishing = functions.region('europe-west6').pubsub
+exports.checkScheduledPublishing = functions
+  .region('europe-west6')
+  .runWith({ timeoutSeconds: 120 }) // headroom above the 55s per-publish axios timeout below
+  .pubsub
   .schedule('*/5 * * * *') // Run every 5 minutes
   .timeZone('UTC') // Initial timezone, will be converted per schedule
   .onRun(async () => {
@@ -183,10 +186,11 @@ async function triggerPublishing(userId, schedule) {
           'Content-Type': 'application/json',
           'X-Cloud-Function-Auth': authKeyValue
         },
-        // The server now polls C4RModelGetPublishJob (up to ~20s) before responding
+        // The server now polls C4RModelGetPublishJob (up to ~40s) before responding
         // so it can report real completion instead of just command-acceptance -
-        // give it headroom beyond that wait.
-        timeout: 45000
+        // give it headroom beyond that wait, but stay under this function's default
+        // 60s execution timeout.
+        timeout: 55000
       }
     );
     
