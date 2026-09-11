@@ -450,27 +450,23 @@ function showAccessBanner(u) {
             + 'text-align:center;font-size:13px;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);';
         document.body.insertBefore(banner, document.body.firstChild);
     }
-    let html = '';
-    let bg = '#0696D7';
-    if (u.isAdmin) {
-        html = `<strong>Admin Account:</strong> ${u.email}`;
-    } else if (u.isTrial && u.trialEndDate) {
-        const ms = new Date(u.trialEndDate) - new Date();
-        const days = Math.ceil(ms / 86400000);
-        const hours = Math.ceil(ms / 3600000);
-        const left = days > 1 ? `${days} days` : (hours > 1 ? `${hours} hours` : 'less than 1 hour');
-        bg = ms > 0 ? '#ff9800' : '#dc3545';
-        html = ms > 0
-            ? `<strong>Free trial:</strong> ${left} remaining — <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`
-            : `<strong>Trial expired.</strong> <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`;
-    } else if (u.licenseExpiry) {
-        const days = Math.ceil((new Date(u.licenseExpiry) - new Date()) / 86400000);
-        html = `<strong>License:</strong> valid until ${new Date(u.licenseExpiry).toLocaleDateString()} (${days} day(s) left)`;
-    } else {
+    // Only trial users need this banner — admins and licensed/regular users
+    // don't need a persistent reminder every time they use the app.
+    if (!u.isTrial || !u.trialEndDate) {
         banner.style.display = 'none';
         document.documentElement.style.setProperty('--banner-h', '0px');
         return;
     }
+
+    const ms = new Date(u.trialEndDate) - new Date();
+    const days = Math.ceil(ms / 86400000);
+    const hours = Math.ceil(ms / 3600000);
+    const left = days > 1 ? `${days} days` : (hours > 1 ? `${hours} hours` : 'less than 1 hour');
+    const bg = ms > 0 ? '#ff9800' : '#dc3545';
+    const html = ms > 0
+        ? `<strong>Free trial:</strong> ${left} remaining — <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`
+        : `<strong>Trial expired.</strong> <a href="/purchase" style="color:#fff;text-decoration:underline;">Get a license</a>`;
+
     banner.style.display = 'block';
     banner.style.background = bg;
     banner.innerHTML = html;
@@ -2019,7 +2015,13 @@ function renderFilesList() {
     table.style.borderCollapse = 'collapse';
     table.style.tableLayout = 'fixed';
     table.style.fontSize = '13px';
-    table.style.width = Object.keys(FILE_COL_DEFAULT_WIDTH).reduce((s, k) => s + w(k), 0) + 'px';
+    // Until a column has been manually dragged, fill the container width (the
+    // per-column widths below still act as fill ratios under table-layout:fixed).
+    // Once resized, keep the table at the explicit sum so each column's drag stays independent.
+    const hasManualColWidths = Object.keys(fileColWidths).length > 0;
+    table.style.width = hasManualColWidths
+        ? Object.keys(FILE_COL_DEFAULT_WIDTH).reduce((s, k) => s + w(k), 0) + 'px'
+        : '100%';
     
     // Sort indicators
     const getSortIndicator = (column) => {
@@ -2173,6 +2175,14 @@ function renderFilesList() {
         th.style.width = w(key) + 'px';
         th.style.overflow = 'hidden';
         if (resizable) makeThResizable(th, key, table);
+        // Sticky per-cell (not just the row) — with table-layout:fixed and
+        // border-collapse:collapse, a row-only sticky header lets scrolled rows
+        // visually bleed over the top edge. Each th pinning + painting its own
+        // opaque background is the reliable fix.
+        th.style.position = 'sticky';
+        th.style.top = '0';
+        th.style.zIndex = '2';
+        th.style.backgroundColor = '#f8f9fa';
     });
 
     headerRow.appendChild(thCheckbox);
