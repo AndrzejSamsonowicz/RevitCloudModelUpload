@@ -94,6 +94,33 @@ async function publishModel(projectId, lineageId, token) {
 }
 
 /**
+ * Get an item's current tip version number.
+ *
+ * Unlike C4RModelGetPublishJob's extension.data (isUpToDate/lastPublishTime), which
+ * Autodesk returns empty in practice, GET /items/{itemId} reliably returns the tip
+ * version relationship - its URN carries a `?version=N` suffix we can compare
+ * before/after a publish to tell whether it actually created a new version.
+ *
+ * @param {string} projectId - ACC project id, `b.` prefixed
+ * @param {string} itemId - lineage/item URN (`dm.lineage`)
+ * @param {string} token - user 3-legged token
+ * @returns {Promise<number|null>} tip version number, or null if unavailable
+ */
+async function getTipVersionNumber(projectId, itemId, token) {
+    try {
+        const response = await axios.get(
+            `${APS_BASE}/data/v1/projects/${projectId}/items/${encodeURIComponent(itemId)}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const tipUrn = response.data?.data?.relationships?.tip?.data?.id;
+        const match = tipUrn?.match(/version=(\d+)/);
+        return match ? parseInt(match[1], 10) : null;
+    } catch (err) {
+        return null;
+    }
+}
+
+/**
  * Check the status of a previously-issued C4RModelPublish job.
  *
  * `C4RModelPublish` returning `status: "committed"` only means the command was
@@ -146,15 +173,20 @@ async function getPublishJobStatus(projectId, lineageId, token) {
  * caller gets a real answer instead of trusting the "committed" acceptance status.
  *
  * Note: `isUpToDate`/`lastPublishTime` in the job's `extension.data`, despite being
- * documented (see API_REFERENCE_PUBLISHMODEL.md), come back empty in practice, so
- * there's no reliable way to distinguish "published a new version" from "already up
- * to date, no-op" — `versionCreated` is always null (unknown) as a result.
+ * documented (see API_REFERENCE_PUBLISHMODEL.md), come back empty in practice. Instead,
+ * `versionCreated` is derived from the item's tip version number before/after the
+ * publish (see getTipVersionNumber) - a model with no unpublished changes since its
+ * last publish is a no-op: the command still reports "complete", but the tip version
+ * doesn't move.
  *
- * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, versionCreated: null, detail: string}>}
+ * @returns {Promise<{commandId: string, confirmed: boolean, success: boolean, jobStatus: string, versionCreated: boolean|null, detail: string}>}
  *   confirmed=true  -> jobStatus is 'complete' or 'failed' (success reflects which)
  *   confirmed=false -> still pending/inprogress after maxWaitMs; not a failure, just unresolved
+ *   versionCreated  -> only meaningful when jobStatus === 'complete'; null if tip version couldn't be read
  */
 async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs = 20000, intervalMs = 3000 } = {}) {
+    const baselineVersion = await getTipVersionNumber(projectId, lineageId, token);
+
     const { commandId } = await publishModel(projectId, lineageId, token);
 
     const deadline = Date.now() + maxWaitMs;
@@ -170,9 +202,17 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
             continue;
         }
         if (last.status === 'complete') {
+            const finalVersion = await getTipVersionNumber(projectId, lineageId, token);
+            const versionCreated = (baselineVersion !== null && finalVersion !== null)
+                ? finalVersion > baselineVersion
+                : null;
             return {
-                commandId, confirmed: true, success: true, jobStatus: 'complete', versionCreated: null,
-                detail: 'Publish confirmed complete'
+                commandId, confirmed: true, success: true, jobStatus: 'complete', versionCreated,
+                detail: versionCreated === false
+                    ? 'Model already up to date - no changes since the last publish, nothing new was published'
+                    : versionCreated === true
+                        ? `Publish confirmed - new version v${finalVersion} created`
+                        : 'Publish confirmed complete'
             };
         }
         if (last.status === 'failed') {
@@ -190,4 +230,4 @@ async function publishModelAndConfirm(projectId, lineageId, token, { maxWaitMs =
     };
 }
 
-module.exports = { resolveLineageId, publishModel, getPublishJobStatus, publishModelAndConfirm, PUBLISH_COMMAND_TYPE };
+module.exports = { resolveLineageId, publishModel, getPublishJobStatus, getTipVersionNumber, publishModelAndConfirm, PUBLISH_COMMAND_TYPE };

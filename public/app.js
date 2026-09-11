@@ -3268,6 +3268,7 @@ async function refreshPublishingHistory() {
                             commandId: data.commandId,
                             itemId: data.itemId,
                             projectId: data.projectId,
+                            versionCreated: data.versionCreated ?? null,
                             source: data.source || 'scheduled', // Use actual source from Firestore
                             age: entryAge > tenMinutes ? 'timeout' : 'active'
                         }
@@ -3334,11 +3335,18 @@ async function refreshPublishingHistory() {
             const isPending = entry.status === 'pending' || 
                 (entry.status === 'info' && entry.message?.includes('Publishing') && !entry.message?.includes('failed') && !entry.message?.includes('successfully'));
             
+            // A publish command can report "success" even when nothing new was
+            // published - the model already had no changes since its last publish.
+            const isNoOpPublish = entry.status === 'success' && entry.details?.versionCreated === false;
+
             let statusColor = '#6c757d';
             let statusIcon = 'ℹ';
             if (isPending) {
                 statusColor = '#0696D7';
                 statusIcon = '⏳';
+            } else if (isNoOpPublish) {
+                statusColor = '#6c757d';
+                statusIcon = '➖';
             } else if (entry.status === 'success') {
                 statusColor = '#28a745';
                 statusIcon = '✓';
@@ -3379,6 +3387,10 @@ async function refreshPublishingHistory() {
                     fileTypeBadge = '<span style="background: #17a2b8; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">C4R</span>';
                 }
             }
+
+            const noOpBadge = isNoOpPublish
+                ? '<span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">NO CHANGES</span>'
+                : '';
             
             html += `
                 <div style="background: white; border-left: 4px solid ${statusColor}; padding: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -3389,6 +3401,7 @@ async function refreshPublishingHistory() {
                                 ${entry.fileName}
                                 ${sourceBadge}
                                 ${fileTypeBadge}
+                                ${noOpBadge}
                             </div>
                             <div style="font-size: 12px; color: #666;">
                                 ${entry.projectName || 'Unknown Project'}
