@@ -131,6 +131,8 @@ async function getPublishJobStatus(projectId, lineageId, token) {
         }
     );
 
+    console.log(`[getPublishJobStatus] raw response for ${lineageId}:`, JSON.stringify(response.data));
+
     const attrs = response.data?.data?.attributes;
     const data = attrs?.extension?.data || {};
     return {
